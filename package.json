@@ -1,0 +1,19 @@
+{
+  "name": "tezos-node-setup",
+  "version": "1.0.0",
+  "description": "Setup Tezos node with one command",
+  "main": "index.js",
+  "bin": {
+    "tezos-node": "./bin/tezos-node"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Votre Nom",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.21.1",
+    "cli-progress": "^3.12.0",
+    "inquirer": "^8.1.2"
+  }
+}
