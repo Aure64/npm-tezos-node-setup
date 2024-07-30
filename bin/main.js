@@ -40,7 +40,7 @@ async function main() {
             message: 'Choisissez le mode:',
             choices: [
                 { name: `full (${snapshotSizes.full} GB)`, value: 'full' },
-                { name: `rolling (${snapshotSizes.rolling} GB)`, value: 'rolling' }
+                { name: `rolling (${snapshotSizes.rolling} GB})`, value: 'rolling' }
             ]
         }
     ]);
@@ -71,7 +71,7 @@ async function main() {
             type: 'input',
             name: 'nodeName',
             message: 'Voulez-vous personnaliser le nom du nœud? (laisser vide pour le nom par défaut):',
-            default: `.${network}-node-1`
+            default: `.${network}-node`
         },
         {
             type: 'input',
@@ -81,7 +81,7 @@ async function main() {
         }
     ]);
 
-    const dataDir = path.join(customPath, nodeName === `${network}-node-1` ? `.${nodeName}` : nodeName);
+    const dataDir = path.join(customPath, nodeName === `.${network}-node` ? nodeName : nodeName);
     const fastMode = snapshotMode === 'fast';
 
     if (fs.existsSync(dataDir)) {
