@@ -6,6 +6,7 @@ const { execSync, exec } = require('child_process');
 const os = require('os');
 const path = require('path');
 const configureServiceUnit = require('../lib/serviceManager');
+const { checkPortInUse, findAvailablePort } = require('../lib/detectPorts');
 const fs = require('fs');
 
 const BASE_DIR = os.homedir();
@@ -59,19 +60,10 @@ async function main() {
         }
     ]);
 
-    const { rpcPort, netPort, snapshotMode, nodeName, customPath } = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'rpcPort',
-            message: 'Entrez le port RPC à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut 8732):',
-            default: '8732'
-        },
-        {
-            type: 'input',
-            name: 'netPort',
-            message: 'Entrez le port réseau à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut 9732):',
-            default: '9732'
-        },
+    const rpcPort = await findAvailablePort(8732, 8750);
+    const netPort = await findAvailablePort(9732, 9750);
+
+    const { snapshotMode, nodeName, customPath } = await inquirer.prompt([
         {
             type: 'list',
             name: 'snapshotMode',
