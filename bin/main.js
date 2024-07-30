@@ -1,12 +1,11 @@
 const inquirer = require('inquirer');
 const installTezosTools = require('../lib/packageManager').installTezosTools;
-const detectExistingNodes = require('../lib/detectNodes');
 const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
 const { execSync, exec } = require('child_process');
 const os = require('os');
 const path = require('path');
 const configureServiceUnit = require('../lib/serviceManager');
-const { checkPortInUse, findAvailablePort } = require('../lib/detectPorts');
+const { checkPortInUse, findAvailablePort, detectExistingNodes } = require('../lib/detect');
 const fs = require('fs');
 
 const BASE_DIR = os.homedir();
@@ -202,7 +201,6 @@ async function main() {
         process.exit(1);
     }
 
-    // Générer un nom de service unique
     let serviceName;
     for (let i = 1; ; i++) {
         serviceName = `octez-node-${network}-${i}`;
