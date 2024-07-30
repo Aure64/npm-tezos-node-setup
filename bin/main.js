@@ -6,6 +6,7 @@ const { execSync, exec } = require('child_process');
 const os = require('os');
 const path = require('path');
 const configureServiceUnit = require('../lib/serviceManager');
+const fs = require('fs');
 
 const BASE_DIR = os.homedir();
 
@@ -44,7 +45,7 @@ async function main() {
         }
     ]);
 
-    const { rpcPort, netPort, snapshotMode, customName } = await inquirer.prompt([
+    const { rpcPort, netPort, snapshotMode, nodeName, customPath } = await inquirer.prompt([
         {
             type: 'input',
             name: 'rpcPort',
@@ -68,14 +69,19 @@ async function main() {
         },
         {
             type: 'input',
-            name: 'customName',
-            message: 'Voulez-vous personnaliser le nom et l\'emplacement du nœud? (laisser vide pour le nom par défaut):',
-            default: ''
+            name: 'nodeName',
+            message: 'Voulez-vous personnaliser le nom du nœud? (laisser vide pour le nom par défaut):',
+            default: `.${network}-node-1`
+        },
+        {
+            type: 'input',
+            name: 'customPath',
+            message: 'Voulez-vous personnaliser l\'emplacement du nœud? (laisser vide pour l\'emplacement par défaut):',
+            default: BASE_DIR
         }
     ]);
 
-    const nodeName = customName || `${network}-node-1`;
-    const dataDir = path.join(BASE_DIR, `.tezos-${nodeName}`);
+    const dataDir = path.join(customPath, nodeName === `${network}-node-1` ? `.${nodeName}` : nodeName);
     const fastMode = snapshotMode === 'fast';
 
     if (fs.existsSync(dataDir)) {
@@ -83,7 +89,7 @@ async function main() {
         process.exit(1);
     }
 
-    fs.mkdirSync(dataDir);
+    fs.mkdirSync(dataDir, { recursive: true });
 
     console.log(`Initialisation du noeud...`);
     execSync(`octez-node config init --data-dir ${dataDir} --network=${network} --history-mode=${mode}`);
