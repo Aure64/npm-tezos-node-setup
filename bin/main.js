@@ -178,7 +178,13 @@ async function main() {
     const fastMode = snapshotMode === 'fast';
 
     console.log(`Initialisation du noeud...`);
-    execSync(`octez-node config init --data-dir ${dataDir} --network=${network} --history-mode=${mode}`);
+    try {
+        execSync(`octez-node config init --data-dir ${dataDir} --network=${network} --history-mode=${mode}`);
+    } catch (error) {
+        console.error('Erreur lors de l\'initialisation du noeud:', error.message);
+        process.exit(1);
+    }
+
     console.log(`Lancement du noeud pour création de l'identité...`);
     const nodeProcess = exec(`octez-node run --data-dir ${dataDir}`);
 
@@ -187,7 +193,10 @@ async function main() {
         console.log('Identité créée, arrêt du noeud...');
         nodeProcess.kill('SIGINT');
     } catch (error) {
-        console.error(error.message);
+        console.error('Erreur lors de la création de l\'identité:', error.message);
+        nodeProcess.kill('SIGINT');
+        fs.rmSync(dataDir, { recursive: true });
+        console.log('Le dossier de données a été supprimé. Réessayez.');
         process.exit(1);
     }
 
@@ -198,12 +207,34 @@ async function main() {
         cleanNodeData(dataDir);
         await importSnapshot(network, mode, dataDir, fastMode);
     } catch (error) {
-        console.error('Erreur lors de l\'importation du snapshot:', error);
+        console.error('Erreur lors de l\'importation du snapshot:', error.message);
+        console.log('Tentative de nettoyage et nouvelle importation du snapshot...');
+        cleanNodeData(dataDir);
+        try {
+            await importSnapshot(network, mode, dataDir, fastMode);
+        } catch (importError) {
+            console.error('Nouvelle erreur lors de l\'importation du snapshot:', importError.message);
+            process.exit(1);
+        }
+    }
+
+    try {
+        await new Promise((resolve, reject) => {
+            sudo.exec(`systemctl restart octez-node`, { name: 'octez-node-setup' }, (error, stdout, stderr) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    console.log('Le service octez-node a été redémarré.');
+                    resolve();
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Erreur lors du redémarrage du service octez-node:', error.message);
         process.exit(1);
     }
 
-    const serviceName = `octez-node-${network}-${nodeName}`;
-    configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
+    configureServiceUnit(dataDir, rpcPort, netPort);
     console.log('Installation terminée.');
 }
 
