@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const configureServiceUnit = require('../lib/serviceManager');
 const fs = require('fs');
+const { checkPortInUse, findAvailablePort } = require('../lib/detectPorts');
 
 const BASE_DIR = os.homedir();
 
@@ -45,18 +46,22 @@ async function main() {
         }
     ]);
 
+    // Trouver les ports disponibles
+    const defaultRpcPort = await findAvailablePort(8732, 8750);
+    const defaultNetPort = await findAvailablePort(9732, 9750);
+
     const { rpcPort, netPort, snapshotMode, nodeName, customPath } = await inquirer.prompt([
         {
             type: 'input',
             name: 'rpcPort',
-            message: 'Entrez le port RPC à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut 8732):',
-            default: '8732'
+            message: `Entrez le port RPC à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut ${defaultRpcPort}):`,
+            default: defaultRpcPort
         },
         {
             type: 'input',
             name: 'netPort',
-            message: 'Entrez le port réseau à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut 9732):',
-            default: '9732'
+            message: `Entrez le port réseau à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut ${defaultNetPort}):`,
+            default: defaultNetPort
         },
         {
             type: 'list',
@@ -80,6 +85,15 @@ async function main() {
             default: BASE_DIR
         }
     ]);
+
+    // Vérifier si les ports sont disponibles
+    const isRpcPortInUse = await checkPortInUse(rpcPort);
+    const isNetPortInUse = await checkPortInUse(netPort);
+
+    if (isRpcPortInUse || isNetPortInUse) {
+        console.log(`Le port RPC ${rpcPort} ou le port réseau ${netPort} est déjà utilisé. Veuillez choisir d'autres ports.`);
+        process.exit(1);
+    }
 
     const dataDir = path.join(customPath, nodeName === `.${network}-node` ? nodeName : nodeName);
     const fastMode = snapshotMode === 'fast';
