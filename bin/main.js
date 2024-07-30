@@ -60,8 +60,60 @@ async function main() {
         }
     ]);
 
-    const rpcPort = await findAvailablePort(8732, 8750);
-    const netPort = await findAvailablePort(9732, 9750);
+    let rpcPort;
+    let netPort;
+
+    while (true) {
+        rpcPort = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'rpcPort',
+                message: 'Entrez le port RPC à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut 8732):',
+                default: '8732',
+                validate: async (input) => {
+                    const port = parseInt(input, 10);
+                    if (isNaN(port)) {
+                        return 'Veuillez entrer un numéro de port valide.';
+                    }
+                    const inUse = await checkPortInUse(port);
+                    if (inUse) {
+                        return `Le port ${port} est déjà utilisé. Veuillez en choisir un autre.`;
+                    }
+                    return true;
+                }
+            }
+        ]);
+
+        rpcPort = rpcPort.rpcPort;
+
+        netPort = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'netPort',
+                message: 'Entrez le port réseau à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut 9732):',
+                default: '9732',
+                validate: async (input) => {
+                    const port = parseInt(input, 10);
+                    if (isNaN(port)) {
+                        return 'Veuillez entrer un numéro de port valide.';
+                    }
+                    const inUse = await checkPortInUse(port);
+                    if (inUse) {
+                        return `Le port ${port} est déjà utilisé. Veuillez en choisir un autre.`;
+                    }
+                    return true;
+                }
+            }
+        ]);
+
+        netPort = netPort.netPort;
+
+        if (!(await checkPortInUse(rpcPort)) && !(await checkPortInUse(netPort))) {
+            break;
+        } else {
+            console.log(`Les ports choisis (${rpcPort}, ${netPort}) sont déjà utilisés. Veuillez en choisir d'autres.`);
+        }
+    }
 
     const { snapshotMode, nodeName, customPath } = await inquirer.prompt([
         {
