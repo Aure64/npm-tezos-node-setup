@@ -11,7 +11,7 @@ const fs = require('fs');
 const BASE_DIR = os.homedir();
 
 async function main() {
-    // Installation des outils Tezos
+    console.log('Téléchargement et installation de octez-client et octez-node...');
     await installTezosTools();
 
     const existingNodes = detectExistingNodes();
