@@ -1,96 +1,89 @@
 const inquirer = require('inquirer');
-const getOS = require('../lib/getOS');
-const packageManager = require('../lib/packageManager');
-const snapshotManager = require('../lib/snapshotManager');
-const serviceManager = require('../lib/serviceManager');
+const installTezosTools = require('../lib/packageManager').installTezosTools;
+const detectExistingNodes = require('../lib/detectNodes');
+const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
 const { execSync, exec } = require('child_process');
-const path = require('path');
 const os = require('os');
-const fs = require('fs');
+const path = require('path');
+const configureServiceUnit = require('../lib/serviceManager');
 
-const BASE_DATA_DIR = path.join(os.homedir(), '.tezos-node-setup');
-
-function getNextAvailableDataDir(network) {
-    let index = 1;
-    let dataDir;
-    do {
-        dataDir = `${BASE_DATA_DIR}-${network}-${index}`;
-        index++;
-    } while (fs.existsSync(dataDir));
-    return dataDir;
-}
+const BASE_DIR = os.homedir();
 
 async function main() {
-    const { distro } = await getOS();
+    // Installation des outils Tezos
+    await installTezosTools();
 
-    await packageManager.installTezosTools(distro);
+    const existingNodes = detectExistingNodes();
+    if (existingNodes.length > 0) {
+        console.log('Nœuds Tezos existants :');
+        existingNodes.forEach(node => console.log(`- ${node}`));
+    } else {
+        console.log('Aucun nœud Tezos existant trouvé.');
+    }
 
-    const networks = ['mainnet', 'ghostnet'];
     const { network } = await inquirer.prompt([
         {
             type: 'list',
             name: 'network',
             message: 'Choisissez le réseau:',
-            choices: networks
+            choices: ['mainnet', 'ghostnet']
         }
     ]);
 
-    const snapshotSizes = await snapshotManager.getSnapshotSizes(network);
+    const snapshotSizes = await getSnapshotSizes(network);
+
     const { mode } = await inquirer.prompt([
         {
             type: 'list',
             name: 'mode',
             message: 'Choisissez le mode:',
-            choices: Object.keys(snapshotSizes).map(key => ({
-                name: `${key} (${snapshotSizes[key]} GB)`,
-                value: key
-            }))
+            choices: [
+                { name: `full (${snapshotSizes.full} GB)`, value: 'full' },
+                { name: `rolling (${snapshotSizes.rolling} GB)`, value: 'rolling' }
+            ]
         }
     ]);
 
-    const portChoices = await inquirer.prompt([
+    const { rpcPort, netPort, snapshotMode, customName } = await inquirer.prompt([
         {
             type: 'input',
             name: 'rpcPort',
             message: 'Entrez le port RPC à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut 8732):',
-            default: 8732,
-            validate: function (value) {
-                const valid = !isNaN(parseFloat(value)) && isFinite(value);
-                return valid || 'Veuillez entrer un numéro de port valide';
-            }
+            default: '8732'
         },
         {
             type: 'input',
             name: 'netPort',
             message: 'Entrez le port réseau à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut 9732):',
-            default: 9732,
-            validate: function (value) {
-                const valid = !isNaN(parseFloat(value)) && isFinite(value);
-                return valid || 'Veuillez entrer un numéro de port valide';
-            }
-        }
-    ]);
-
-    const rpcPort = portChoices.rpcPort;
-    const netPort = portChoices.netPort;
-    console.log(`Ports choisis - RPC: ${rpcPort}, Réseau: ${netPort}`);
-
-    const importChoice = await inquirer.prompt([
+            default: '9732'
+        },
         {
             type: 'list',
-            name: 'importMode',
+            name: 'snapshotMode',
             message: 'Choisissez le mode d\'importation du snapshot:',
             choices: [
-                { name: 'Safe mode (recommended)', value: 'safe' },
+                { name: 'Safe mode', value: 'safe' },
                 { name: 'Fast mode', value: 'fast' }
             ]
+        },
+        {
+            type: 'input',
+            name: 'customName',
+            message: 'Voulez-vous personnaliser le nom et l\'emplacement du nœud? (laisser vide pour le nom par défaut):',
+            default: ''
         }
     ]);
 
-    const importMode = importChoice.importMode;
+    const nodeName = customName || `${network}-node-1`;
+    const dataDir = path.join(BASE_DIR, `.tezos-${nodeName}`);
+    const fastMode = snapshotMode === 'fast';
 
-    const dataDir = getNextAvailableDataDir(network);
-    console.log(`Répertoire de données choisi : ${dataDir}`);
+    if (fs.existsSync(dataDir)) {
+        console.log(`Le dossier ${dataDir} existe déjà. Veuillez choisir un autre nom.`);
+        process.exit(1);
+    }
+
+    fs.mkdirSync(dataDir);
 
     console.log(`Initialisation du noeud...`);
     execSync(`octez-node config init --data-dir ${dataDir} --network=${network} --history-mode=${mode}`);
@@ -98,7 +91,7 @@ async function main() {
     const nodeProcess = exec(`octez-node run --data-dir ${dataDir}`);
 
     try {
-        await snapshotManager.waitForIdentityFile(dataDir);
+        await waitForIdentityFile(dataDir);
         console.log('Identité créée, arrêt du noeud...');
         nodeProcess.kill('SIGINT');
     } catch (error) {
@@ -110,14 +103,14 @@ async function main() {
     execSync(`sudo systemctl stop octez-node`);
 
     try {
-        snapshotManager.cleanNodeData(dataDir);
-        await snapshotManager.importSnapshot(network, mode, dataDir, importMode === 'fast');
+        cleanNodeData(dataDir);
+        await importSnapshot(network, mode, dataDir, fastMode);
     } catch (error) {
         console.error('Erreur lors de l\'importation du snapshot:', error);
         process.exit(1);
     }
 
-    serviceManager.configureServiceUnit(dataDir, rpcPort, netPort);
+    configureServiceUnit(dataDir, rpcPort, netPort);
     console.log('Installation terminée.');
 }
 
