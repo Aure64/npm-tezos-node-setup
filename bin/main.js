@@ -115,7 +115,55 @@ async function main() {
         }
     }
 
-    const { snapshotMode, nodeName, customPath } = await inquirer.prompt([
+    let nodeName;
+    let customPath;
+    let dataDir;
+
+    while (true) {
+        const answers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'nodeName',
+                message: 'Voulez-vous personnaliser le nom du nœud? (laisser vide pour le nom par défaut):',
+                default: `.${network}-node`
+            },
+            {
+                type: 'input',
+                name: 'customPath',
+                message: 'Voulez-vous personnaliser l\'emplacement du nœud? (laisser vide pour l\'emplacement par défaut):',
+                default: BASE_DIR
+            }
+        ]);
+
+        nodeName = answers.nodeName;
+        customPath = answers.customPath;
+        dataDir = path.join(customPath, nodeName);
+
+        if (fs.existsSync(dataDir)) {
+            const { overwrite } = await inquirer.prompt([
+                {
+                    type: 'confirm',
+                    name: 'overwrite',
+                    message: `Le dossier ${dataDir} existe déjà. Voulez-vous le supprimer et réinstaller?`,
+                    default: false
+                }
+            ]);
+
+            if (overwrite) {
+                fs.rmSync(dataDir, { recursive: true });
+                console.log(`Le dossier ${dataDir} a été supprimé.`);
+                fs.mkdirSync(dataDir, { recursive: true });
+                break;
+            } else {
+                console.log(`Veuillez choisir un autre nom ou emplacement.`);
+            }
+        } else {
+            fs.mkdirSync(dataDir, { recursive: true });
+            break;
+        }
+    }
+
+    const { snapshotMode } = await inquirer.prompt([
         {
             type: 'list',
             name: 'snapshotMode',
@@ -124,30 +172,10 @@ async function main() {
                 { name: 'Safe mode', value: 'safe' },
                 { name: 'Fast mode', value: 'fast' }
             ]
-        },
-        {
-            type: 'input',
-            name: 'nodeName',
-            message: 'Voulez-vous personnaliser le nom du nœud? (laisser vide pour le nom par défaut):',
-            default: `.${network}-node`
-        },
-        {
-            type: 'input',
-            name: 'customPath',
-            message: 'Voulez-vous personnaliser l\'emplacement du nœud? (laisser vide pour l\'emplacement par défaut):',
-            default: BASE_DIR
         }
     ]);
 
-    const dataDir = path.join(customPath, nodeName === `${network}-node` ? `.${nodeName}` : nodeName);
     const fastMode = snapshotMode === 'fast';
-
-    if (fs.existsSync(dataDir)) {
-        console.log(`Le dossier ${dataDir} existe déjà. Veuillez choisir un autre nom.`);
-        process.exit(1);
-    }
-
-    fs.mkdirSync(dataDir, { recursive: true });
 
     console.log(`Initialisation du noeud...`);
     execSync(`octez-node config init --data-dir ${dataDir} --network=${network} --history-mode=${mode}`);
@@ -174,7 +202,16 @@ async function main() {
         process.exit(1);
     }
 
-    configureServiceUnit(dataDir, rpcPort, netPort);
+    // Générer un nom de service unique
+    let serviceName;
+    for (let i = 1; ; i++) {
+        serviceName = `octez-node-${network}-${i}`;
+        if (!fs.existsSync(`/etc/systemd/system/${serviceName}.service`)) {
+            break;
+        }
+    }
+
+    configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
     console.log('Installation terminée.');
 }
 
