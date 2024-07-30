@@ -18,6 +18,20 @@ async function main() {
     if (existingNodes.length > 0) {
         console.log('Nœuds Tezos existants :');
         existingNodes.forEach(node => console.log(`- ${node}`));
+
+        const { continueInstallation } = await inquirer.prompt([
+            {
+                type: 'confirm',
+                name: 'continueInstallation',
+                message: 'Des nœuds Tezos sont déjà en cours d\'exécution. Voulez-vous continuer l\'installation d\'un nouveau nœud?',
+                default: false
+            }
+        ]);
+
+        if (!continueInstallation) {
+            console.log('Installation annulée par l\'utilisateur.');
+            process.exit(0);
+        }
     } else {
         console.log('Aucun nœud Tezos existant trouvé.');
     }
