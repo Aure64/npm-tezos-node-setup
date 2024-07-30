@@ -40,7 +40,7 @@ async function main() {
             message: 'Choisissez le mode:',
             choices: [
                 { name: `full (${snapshotSizes.full} GB)`, value: 'full' },
-                { name: `rolling (${snapshotSizes.rolling} GB})`, value: 'rolling' }
+                { name: `rolling (${snapshotSizes.rolling} GB)`, value: 'rolling' }
             ]
         }
     ]);
