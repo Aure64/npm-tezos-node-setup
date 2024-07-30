@@ -7,6 +7,7 @@ const path = require('path');
 const configureServiceUnit = require('../lib/serviceManager');
 const { checkPortInUse, findAvailablePort, detectExistingNodes } = require('../lib/detect');
 const fs = require('fs');
+const sudo = require('sudo-prompt');
 
 const BASE_DIR = os.homedir();
 
@@ -201,14 +202,7 @@ async function main() {
         process.exit(1);
     }
 
-    let serviceName;
-    for (let i = 1; ; i++) {
-        serviceName = `octez-node-${network}-${i}`;
-        if (!fs.existsSync(`/etc/systemd/system/${serviceName}.service`)) {
-            break;
-        }
-    }
-
+    const serviceName = `octez-node-${network}-${nodeName}`;
     configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
     console.log('Installation terminée.');
 }
