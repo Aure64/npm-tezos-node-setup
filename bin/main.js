@@ -205,17 +205,28 @@ async function main() {
 
     try {
         cleanNodeData(dataDir);
-        await importSnapshot(network, mode, dataDir, fastMode);
+        console.log(`Téléchargement du snapshot depuis ${snapshotUrl}...`);
+        const snapshotPath = path.join('/tmp', 'snapshot');
+        await downloadFile(snapshotUrl, snapshotPath);
+        await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
     } catch (error) {
         console.error('Erreur lors de l\'importation du snapshot:', error.message);
         console.log('Tentative de nettoyage et nouvelle importation du snapshot...');
         cleanNodeData(dataDir);
         try {
-            await importSnapshot(network, mode, dataDir, fastMode);
+            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
         } catch (importError) {
             console.error('Nouvelle erreur lors de l\'importation du snapshot:', importError.message);
             process.exit(1);
         }
+    }
+
+    console.log('Configuration du service...');
+    try {
+        configureServiceUnit(dataDir, rpcPort, netPort);
+    } catch (error) {
+        console.error('Erreur lors de la configuration du service:', error.message);
+        process.exit(1);
     }
 
     try {
@@ -234,7 +245,6 @@ async function main() {
         process.exit(1);
     }
 
-    configureServiceUnit(dataDir, rpcPort, netPort);
     console.log('Installation terminée.');
 }
 
