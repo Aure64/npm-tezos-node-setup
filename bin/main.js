@@ -1,7 +1,7 @@
 const inquirer = require('inquirer');
 const installTezosTools = require('../lib/packageManager').installTezosTools;
 const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
-const { execSync, exec } = require('child_process');
+const { exec, execSync } = require('child_process');
 const os = require('os');
 const path = require('path');
 const configureServiceUnit = require('../lib/serviceManager');
@@ -170,7 +170,13 @@ async function main() {
     }
 
     console.log('Arrêt du noeud...');
-    execSync(`sudo systemctl stop octez-node`);
+    sudo.exec(`systemctl stop octez-node`, { name: 'Tezos Node Setup' }, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`Erreur lors de l'arrêt du service octez-node: ${error}`);
+            return;
+        }
+        console.log('Service octez-node arrêté.');
+    });
 
     try {
         cleanNodeData(dataDir);
@@ -189,8 +195,17 @@ async function main() {
         }
     }
 
-    configureServiceUnit(dataDir, rpcPort, netPort);
+    console.log('Configuration du service systemd...');
+    const serviceName = `octez-node-${network}-${nodeName}`;
+    try {
+        await configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
+    } catch (error) {
+        console.error('Erreur lors de la configuration du service systemd:', error);
+        process.exit(1);
+    }
+
     console.log('Installation terminée.');
 }
 
 main();
+
