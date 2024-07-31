@@ -16,6 +16,7 @@ async function main() {
     console.log('Téléchargement et installation de octez-client et octez-node...');
     await installTezosTools();
 
+    console.log('Détection des nœuds Tezos existants en cours...');
     const existingNodes = detectExistingNodes();
     if (existingNodes.length > 0) {
         console.log('Nœuds Tezos existants :');
@@ -34,6 +35,8 @@ async function main() {
             console.log('Installation annulée.');
             process.exit(0);
         }
+    } else {
+        console.log('Aucun nœud Tezos existant trouvé.');
     }
 
     const { network } = await inquirer.prompt([
@@ -97,7 +100,7 @@ async function main() {
             type: 'input',
             name: 'nodeName',
             message: 'Voulez-vous personnaliser le nom du nœud? (laisser vide pour le nom par défaut):',
-            default: `.${network}-node`
+            default: `${network}-node`
         },
         {
             type: 'input',
@@ -116,20 +119,34 @@ async function main() {
         }
     ]);
 
-    const dataDir = path.join(customPath, nodeName === `.${network}-node` ? nodeName : `.${nodeName}`);
+    const dataDir = path.join(customPath, nodeName);
     const fastMode = snapshotMode === 'fast';
 
     if (fs.existsSync(dataDir)) {
-        console.log(`Le dossier ${dataDir} existe déjà. Veuillez choisir un autre nom.`);
-        process.exit(1);
+        console.log(`Le dossier ${dataDir} existe déjà.`);
+        const { overwrite } = await inquirer.prompt([
+            {
+                type: 'confirm',
+                name: 'overwrite',
+                message: 'Voulez-vous supprimer le dossier existant et continuer?',
+                default: false
+            }
+        ]);
+
+        if (!overwrite) {
+            console.log('Installation annulée.');
+            process.exit(0);
+        } else {
+            fs.rmSync(dataDir, { recursive: true, force: true });
+        }
     }
 
     fs.mkdirSync(dataDir, { recursive: true });
 
     console.log(`Initialisation du noeud...`);
-    execSync(`octez-node config init --data-dir ${dataDir} --network=${network} --history-mode=${mode}`);
+    execSync(`octez-node config init --data-dir "${dataDir}" --network=${network} --history-mode=${mode}`);
     console.log(`Lancement du noeud pour création de l'identité...`);
-    const nodeProcess = exec(`octez-node run --data-dir ${dataDir}`);
+    const nodeProcess = exec(`octez-node run --data-dir "${dataDir}"`);
 
     try {
         await waitForIdentityFile(dataDir);
@@ -139,8 +156,8 @@ async function main() {
         console.error(error.message);
         cleanNodeData(dataDir);
         console.log('Le dossier de données a été nettoyé. Réinitialisation...');
-        execSync(`octez-node config init --data-dir ${dataDir} --network=${network} --history-mode=${mode}`);
-        const nodeProcessRetry = exec(`octez-node run --data-dir ${dataDir}`);
+        execSync(`octez-node config init --data-dir "${dataDir}" --network=${network} --history-mode=${mode}`);
+        const nodeProcessRetry = exec(`octez-node run --data-dir "${dataDir}"`);
         try {
             await waitForIdentityFile(dataDir);
             console.log('Identité créée lors de la réinitialisation, arrêt du noeud...');
