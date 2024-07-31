@@ -129,12 +129,14 @@ async function main() {
 
     fs.mkdirSync(dataDir, { recursive: true });
 
+    let nodeProcess;
+
     while (true) {
         try {
             console.log(`Initialisation du noeud...`);
             execSync(`octez-node config init --data-dir "${dataDir}" --network=${network} --history-mode=${mode}`);
             console.log(`Lancement du noeud pour création de l'identité...`);
-            const nodeProcess = exec(`octez-node run --data-dir "${dataDir}"`);
+            nodeProcess = exec(`octez-node run --data-dir "${dataDir}"`);
 
             try {
                 await waitForIdentityFile(dataDir);
@@ -152,6 +154,12 @@ async function main() {
             console.error(`Erreur lors de l'initialisation du noeud: ${error.message}`);
             process.exit(1);
         }
+    }
+
+    // Assurez-vous que le processus est bien arrêté avant de continuer
+    if (nodeProcess && nodeProcess.exitCode === null) {
+        nodeProcess.kill('SIGINT');
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Attente pour s'assurer que le processus est bien arrêté
     }
 
     const snapshotPath = '/tmp/snapshot';
