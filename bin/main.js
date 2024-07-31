@@ -1,6 +1,6 @@
 const inquirer = require('inquirer');
 const installTezosTools = require('../lib/packageManager').installTezosTools;
-const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
+const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cleanNodeDataBeforeImport } = require('../lib/snapshotManager');
 const { exec, execSync } = require('child_process');
 const os = require('os');
 const path = require('path');
@@ -181,6 +181,8 @@ async function main() {
 
     while (true) {
         try {
+            console.log('Nettoyage des fichiers avant importation du snapshot...');
+            cleanNodeDataBeforeImport(dataDir);
             await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
             fs.unlinkSync(snapshotPath);
             break;
