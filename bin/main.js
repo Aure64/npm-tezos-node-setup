@@ -129,14 +129,12 @@ async function main() {
 
     fs.mkdirSync(dataDir, { recursive: true });
 
-    let nodeProcess;
-
     while (true) {
         try {
             console.log(`Initialisation du noeud...`);
             execSync(`octez-node config init --data-dir "${dataDir}" --network=${network} --history-mode=${mode}`);
             console.log(`Lancement du noeud pour création de l'identité...`);
-            nodeProcess = exec(`octez-node run --data-dir "${dataDir}"`);
+            const nodeProcess = exec(`octez-node run --data-dir "${dataDir}" --net-addr 0.0.0.0:${netPort}`);
 
             try {
                 await waitForIdentityFile(dataDir);
@@ -157,12 +155,6 @@ async function main() {
     }
 
     // Assurez-vous que le processus est bien arrêté avant de continuer
-    if (nodeProcess && nodeProcess.exitCode === null) {
-        nodeProcess.kill('SIGINT');
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Attente pour s'assurer que le processus est bien arrêté
-    }
-
-    // Vérification et arrêt des processus utilisant le netPort choisi
     try {
         const processesUsingNetPort = execSync(`lsof -i :${netPort}`).toString().split('\n').filter(line => line.includes('octez-node'));
         processesUsingNetPort.forEach(line => {
