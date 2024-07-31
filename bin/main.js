@@ -196,16 +196,9 @@ async function main() {
     }
 
     console.log('Configuration du service systemd...');
-    const serviceName = `octez-node-${network}-${nodeName}`;
-    try {
-        await configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
-    } catch (error) {
-        console.error('Erreur lors de la configuration du service systemd:', error);
-        process.exit(1);
-    }
+    configureServiceUnit(dataDir, rpcPort, netPort, `octez-node-${network}-${nodeName}`);
 
     console.log('Installation terminée.');
 }
 
 main();
-
