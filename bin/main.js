@@ -1,5 +1,5 @@
 const inquirer = require('inquirer');
-const installTezosTools = require('../lib/packageManager').installTezosTools;
+const { installTezosTools } = require('../lib/packageManager');
 const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cleanNodeDataBeforeImport } = require('../lib/snapshotManager');
 const { exec, execSync } = require('child_process');
 const os = require('os');
@@ -18,8 +18,22 @@ async function main() {
     console.log('Detecting existing Tezos nodes...');
     const existingNodes = detectExistingNodes();
     if (existingNodes.length > 0) {
-        console.log('Existing Tezos nodes found:');
+        console.log('Existing Tezos nodes:');
         existingNodes.forEach(node => console.log(`- ${node}`));
+
+        const { continueInstallation } = await inquirer.prompt([
+            {
+                type: 'confirm',
+                name: 'continueInstallation',
+                message: 'Tezos nodes are already running. Do you want to continue installing a new node?',
+                default: false
+            }
+        ]);
+
+        if (!continueInstallation) {
+            console.log('Installation cancelled.');
+            process.exit(0);
+        }
     } else {
         console.log('No existing Tezos nodes found.');
     }
@@ -28,7 +42,7 @@ async function main() {
         {
             type: 'list',
             name: 'network',
-            message: 'Select the network:',
+            message: 'Choose the network:',
             choices: ['mainnet', 'ghostnet']
         }
     ]);
@@ -39,7 +53,7 @@ async function main() {
         {
             type: 'list',
             name: 'mode',
-            message: 'Select the mode:',
+            message: 'Choose the mode:',
             choices: [
                 { name: `full (${snapshotSizes.full} GB)`, value: 'full' },
                 { name: `rolling (${snapshotSizes.rolling} GB)`, value: 'rolling' }
@@ -70,9 +84,9 @@ async function main() {
         const netPortInUse = await checkPortInUse(answers.netPort);
 
         if (rpcPortInUse) {
-            console.log(`The RPC port ${answers.rpcPort} is already in use. Please choose another port.`);
+            console.log(`RPC port ${answers.rpcPort} is already in use. Please choose another port.`);
         } else if (netPortInUse) {
-            console.log(`The network port ${answers.netPort} is already in use. Please choose another port.`);
+            console.log(`Network port ${answers.netPort} is already in use. Please choose another port.`);
         } else {
             rpcPort = answers.rpcPort;
             netPort = answers.netPort;
@@ -84,13 +98,13 @@ async function main() {
         {
             type: 'input',
             name: 'nodeName',
-            message: 'Do you want to customize the node name? (leave blank for default name):',
+            message: 'Would you like to customize the node name? (leave blank for default name):',
             default: `${network}-node`
         },
         {
             type: 'input',
             name: 'customPath',
-            message: 'Do you want to customize the node location? (leave blank for default location):',
+            message: 'Would you like to customize the node location? (leave blank for default location):',
             default: BASE_DIR
         },
         {
@@ -113,16 +127,16 @@ async function main() {
             {
                 type: 'confirm',
                 name: 'removeExisting',
-                message: 'Do you want to remove the existing directory and continue?',
+                message: 'Would you like to remove the existing directory and continue?',
                 default: false
             }
         ]);
 
         if (removeExisting) {
-            execSync(`sudo rm -rf ${dataDir}`);
+            fs.rmSync(dataDir, { recursive: true, force: true });
             console.log(`The directory ${dataDir} has been removed.`);
         } else {
-            console.log('Installation canceled.');
+            console.log('Installation cancelled.');
             process.exit(0);
         }
     }
@@ -133,8 +147,8 @@ async function main() {
         try {
             console.log('Initializing the node...');
             execSync(`octez-node config init --data-dir "${dataDir}" --network=${network} --history-mode=${mode}`);
-            console.log('Starting the node to create the identity...');
-            const nodeProcess = exec(`octez-node run --data-dir "${dataDir}" --net-addr 0.0.0.0:${netPort}`);
+            console.log('Starting the node to create identity...');
+            const nodeProcess = exec(`octez-node run --data-dir "${dataDir}"`);
 
             try {
                 await waitForIdentityFile(dataDir);
@@ -149,7 +163,7 @@ async function main() {
                 console.log('Reinitializing...');
             }
         } catch (error) {
-            console.error(`Error during node initialization: ${error.message}`);
+            console.error(`Error initializing the node: ${error.message}`);
             process.exit(1);
         }
     }
@@ -158,11 +172,11 @@ async function main() {
 
     while (true) {
         try {
-            console.log(`Downloading the snapshot from https://snapshots.eu.tzinit.org/${network}/${mode}...`);
+            console.log(`Downloading snapshot from https://snapshots.eu.tzinit.org/${network}/${mode}...`);
             await downloadFile(`https://snapshots.eu.tzinit.org/${network}/${mode}`, snapshotPath);
             break;
         } catch (error) {
-            console.error(`Error downloading the snapshot: ${error.message}`);
+            console.error(`Error downloading snapshot: ${error.message}`);
         }
     }
 
@@ -174,39 +188,33 @@ async function main() {
             fs.unlinkSync(snapshotPath);
             break;
         } catch (error) {
-            console.error(`Error importing the snapshot: ${error.message}`);
-            console.log('Attempting cleanup and retrying snapshot import...');
+            console.error(`Error importing snapshot: ${error.message}`);
+            console.log('Attempting to clean and reimport snapshot...');
             cleanNodeData(dataDir);
         }
     }
 
-    // Ensure the process is fully stopped before continuing
-    try {
-        console.log(`Checking and stopping processes using port ${netPort}...`);
-        const processesUsingNetPort = execSync(`lsof -i :${netPort}`).toString().split('\n').filter(line => line.includes('octez-nod'));
-        if (processesUsingNetPort.length > 0) {
-            const pid = processesUsingNetPort[0].split(/\s+/)[1];
+    console.log(`Checking and stopping processes using port ${netPort}...`);
+    const processes = execSync(`lsof -i :${netPort} -t`).toString().split('\n').filter(pid => pid);
+    processes.forEach(pid => {
+        try {
             execSync(`sudo kill ${pid}`);
             console.log(`Stopped process using port ${netPort}: ${pid}`);
-        } else {
-            console.log(`No process using port ${netPort} found.`);
+        } catch (error) {
+            console.error(`Error stopping process ${pid}: ${error.message}`);
         }
-    } catch (e) {
-        // No process using this port
-        console.log(`No process using port ${netPort} found.`);
-    }
+    });
 
     console.log('Configuring systemd service...');
     try {
-        const serviceName = `octez-node-${nodeName}`;
-        configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
+        configureServiceUnit(dataDir, rpcPort, netPort, `octez-node-${nodeName}`);
         console.log('Systemd service configured successfully.');
     } catch (error) {
         console.error(`Error configuring systemd service: ${error.message}`);
         process.exit(1);
     }
 
-    // Check the status of the service
+    // Verify the status of the service
     try {
         const serviceStatus = execSync(`sudo systemctl is-active octez-node-${nodeName}`);
         if (serviceStatus.toString().trim() !== 'active') {
