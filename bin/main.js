@@ -20,20 +20,6 @@ async function main() {
     if (existingNodes.length > 0) {
         console.log('Nœuds Tezos existants :');
         existingNodes.forEach(node => console.log(`- ${node}`));
-
-        const { continueInstallation } = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'continueInstallation',
-                message: 'Des nœuds Tezos sont déjà en cours d\'exécution. Voulez-vous continuer l\'installation d\'un nouveau nœud?',
-                default: false
-            }
-        ]);
-
-        if (!continueInstallation) {
-            console.log('Installation annulée.');
-            process.exit(0);
-        }
     } else {
         console.log('Aucun nœud Tezos existant trouvé.');
     }
@@ -154,7 +140,7 @@ async function main() {
                 await waitForIdentityFile(dataDir);
                 console.log('Identité créée, arrêt du noeud...');
                 nodeProcess.kill('SIGINT');
-                execSync(`sudo fuser -k ${netPort}/tcp`);
+                await new Promise(resolve => setTimeout(resolve, 5000)); // Attente pour s'assurer que le processus est bien arrêté
                 break;
             } catch (error) {
                 console.error(error.message);
@@ -197,27 +183,22 @@ async function main() {
     console.log('Configuration du service systemd...');
     try {
         const serviceName = `octez-node-${nodeName}`;
-        const servicePath = path.join('/etc/systemd/system', `${serviceName}.service`);
+        configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
+        console.log('Service systemd configuré avec succès.');
+    } catch (error) {
+        console.error(`Erreur lors de la configuration du service systemd: ${error.message}`);
+        process.exit(1);
+    }
 
-        // Écriture du fichier de service
-        console.log(`Écriture du fichier de service : ${servicePath}`);
-        fs.writeFileSync(servicePath, configureServiceUnit(dataDir, rpcPort, netPort, serviceName));
-        console.log(`Fichier de service ${servicePath} écrit avec succès.`);
-
-        // Activation et démarrage du service
-        console.log(`Activation et démarrage du service : ${serviceName}`);
-        execSync(`sudo systemctl enable ${serviceName}`);
-        execSync(`sudo systemctl start ${serviceName}`);
-        console.log(`Service ${serviceName} démarré.`);
-
-        // Vérification du statut du service
-        const serviceStatus = execSync(`sudo systemctl is-active ${serviceName}`);
+    // Vérification du statut du service
+    try {
+        const serviceStatus = execSync(`sudo systemctl is-active octez-node-${nodeName}`);
         if (serviceStatus.toString().trim() !== 'active') {
             throw new Error('Le service n\'a pas démarré correctement');
         }
-        console.log(`Le service ${serviceName} a démarré avec succès.`);
+        console.log(`Le service octez-node-${nodeName} a démarré avec succès.`);
     } catch (error) {
-        console.error(`Erreur lors de la configuration du service systemd: ${error.message}`);
+        console.error(`Erreur lors du démarrage du service: ${error.message}`);
         process.exit(1);
     }
 
