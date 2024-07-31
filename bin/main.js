@@ -184,11 +184,13 @@ async function main() {
     try {
         console.log(`Checking and stopping processes using port ${netPort}...`);
         const processesUsingNetPort = execSync(`lsof -i :${netPort}`).toString().split('\n').filter(line => line.includes('octez-nod'));
-        processesUsingNetPort.forEach(line => {
-            const pid = line.split(/\s+/)[1];
+        if (processesUsingNetPort.length > 0) {
+            const pid = processesUsingNetPort[0].split(/\s+/)[1];
             execSync(`sudo kill ${pid}`);
             console.log(`Stopped process using port ${netPort}: ${pid}`);
-        });
+        } else {
+            console.log(`No process using port ${netPort} found.`);
+        }
     } catch (e) {
         // No process using this port
         console.log(`No process using port ${netPort} found.`);
