@@ -119,79 +119,76 @@ async function main() {
         }
     ]);
 
-    const dataDir = path.join(customPath, nodeName);
+    const dataDir = path.join(customPath, nodeName.startsWith('.') ? nodeName : `.${nodeName}`);
     const fastMode = snapshotMode === 'fast';
-    const snapshotPath = path.join('/tmp', 'snapshot');
 
     if (fs.existsSync(dataDir)) {
         console.log(`Le dossier ${dataDir} existe déjà.`);
-        const { overwrite } = await inquirer.prompt([
+        const { removeExisting } = await inquirer.prompt([
             {
                 type: 'confirm',
-                name: 'overwrite',
+                name: 'removeExisting',
                 message: 'Voulez-vous supprimer le dossier existant et continuer?',
                 default: false
             }
         ]);
 
-        if (!overwrite) {
+        if (removeExisting) {
+            fs.rmSync(dataDir, { recursive: true, force: true });
+            console.log(`Le dossier ${dataDir} a été supprimé.`);
+        } else {
             console.log('Installation annulée.');
             process.exit(0);
-        } else {
-            fs.rmSync(dataDir, { recursive: true, force: true });
         }
     }
 
     fs.mkdirSync(dataDir, { recursive: true });
 
-    console.log(`Initialisation du noeud...`);
-    execSync(`octez-node config init --data-dir "${dataDir}" --network=${network} --history-mode=${mode}`);
-    console.log(`Lancement du noeud pour création de l'identité...`);
-    const nodeProcess = exec(`octez-node run --data-dir "${dataDir}"`);
-
-    try {
-        await waitForIdentityFile(dataDir);
-        console.log('Identité créée, arrêt du noeud...');
-        nodeProcess.kill('SIGINT');
-    } catch (error) {
-        console.error(error.message);
-        cleanNodeData(dataDir);
-        console.log('Le dossier de données a été nettoyé. Réinitialisation...');
-        execSync(`octez-node config init --data-dir "${dataDir}" --network=${network} --history-mode=${mode}`);
-        const nodeProcessRetry = exec(`octez-node run --data-dir "${dataDir}"`);
+    while (true) {
         try {
-            await waitForIdentityFile(dataDir);
-            console.log('Identité créée lors de la réinitialisation, arrêt du noeud...');
-            nodeProcessRetry.kill('SIGINT');
-        } catch (retryError) {
-            console.error(retryError.message);
+            console.log(`Initialisation du noeud...`);
+            execSync(`octez-node config init --data-dir "${dataDir}" --network=${network} --history-mode=${mode}`);
+            console.log(`Lancement du noeud pour création de l'identité...`);
+            const nodeProcess = exec(`octez-node run --data-dir "${dataDir}"`);
+
+            try {
+                await waitForIdentityFile(dataDir);
+                console.log('Identité créée, arrêt du noeud...');
+                nodeProcess.kill('SIGINT');
+                break;
+            } catch (error) {
+                console.error(error.message);
+                console.log('Nettoyage des données du nœud...');
+                cleanNodeData(dataDir);
+                console.log('Réinitialisation...');
+            }
+        } catch (error) {
+            console.error(`Erreur lors de l'initialisation du noeud: ${error.message}`);
             process.exit(1);
         }
     }
 
-    console.log('Arrêt du noeud...');
-    sudo.exec(`systemctl stop octez-node`, { name: 'Tezos Node Setup' }, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`Erreur lors de l'arrêt du service octez-node: ${error}`);
-            return;
-        }
-        console.log('Service octez-node arrêté.');
-    });
+    const snapshotPath = '/tmp/snapshot';
 
-    try {
-        cleanNodeData(dataDir);
-        console.log(`Téléchargement du snapshot depuis https://snapshots.eu.tzinit.org/${network}/${mode}...`);
-        await downloadFile(`https://snapshots.eu.tzinit.org/${network}/${mode}`, snapshotPath);
-        await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
-    } catch (error) {
-        console.error('Erreur lors de l\'importation du snapshot:', error);
-        console.log('Tentative de nettoyage et nouvelle importation du snapshot...');
-        cleanNodeData(dataDir);
+    while (true) {
+        try {
+            console.log(`Téléchargement du snapshot depuis https://snapshots.eu.tzinit.org/${network}/${mode}...`);
+            await downloadFile(`https://snapshots.eu.tzinit.org/${network}/${mode}`, snapshotPath);
+            break;
+        } catch (error) {
+            console.error(`Erreur lors du téléchargement du snapshot: ${error.message}`);
+        }
+    }
+
+    while (true) {
         try {
             await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
-        } catch (retryError) {
-            console.error('Nouvelle erreur lors de l\'importation du snapshot:', retryError);
-            process.exit(1);
+            fs.unlinkSync(snapshotPath);
+            break;
+        } catch (error) {
+            console.error(`Erreur lors de l'importation du snapshot: ${error.message}`);
+            console.log('Tentative de nettoyage et nouvelle importation du snapshot...');
+            cleanNodeData(dataDir);
         }
     }
 
