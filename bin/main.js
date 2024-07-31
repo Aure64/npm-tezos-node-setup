@@ -195,13 +195,17 @@ async function main() {
 
     console.log('Configuration du service systemd...');
     try {
+        execSync(`sudo chmod 777 /etc/systemd/system`);
         await configureServiceUnit(dataDir, rpcPort, netPort, `octez-node-${network}-${nodeName}`);
+        execSync(`sudo chmod 755 /etc/systemd/system`);
+        console.log('Service systemd configuré avec succès.');
     } catch (error) {
         console.error(`Erreur lors de la configuration du service systemd: ${error.message}`);
         process.exit(1);
     }
 
     console.log('Installation terminée.');
+    process.exit(0);
 }
 
 main();
