@@ -12,23 +12,23 @@ const downloadFile = require('../lib/downloadFile');
 const BASE_DIR = os.homedir();
 
 async function main() {
-    console.log('Téléchargement et installation de octez-client et octez-node...');
+    console.log('Downloading and installing octez-client and octez-node...');
     await installTezosTools();
 
-    console.log('Détection des nœuds Tezos existants en cours...');
+    console.log('Detecting existing Tezos nodes...');
     const existingNodes = detectExistingNodes();
     if (existingNodes.length > 0) {
-        console.log('Nœuds Tezos existants :');
+        console.log('Existing Tezos nodes found:');
         existingNodes.forEach(node => console.log(`- ${node}`));
     } else {
-        console.log('Aucun nœud Tezos existant trouvé.');
+        console.log('No existing Tezos nodes found.');
     }
 
     const { network } = await inquirer.prompt([
         {
             type: 'list',
             name: 'network',
-            message: 'Choisissez le réseau:',
+            message: 'Select the network:',
             choices: ['mainnet', 'ghostnet']
         }
     ]);
@@ -39,7 +39,7 @@ async function main() {
         {
             type: 'list',
             name: 'mode',
-            message: 'Choisissez le mode:',
+            message: 'Select the mode:',
             choices: [
                 { name: `full (${snapshotSizes.full} GB)`, value: 'full' },
                 { name: `rolling (${snapshotSizes.rolling} GB)`, value: 'rolling' }
@@ -55,13 +55,13 @@ async function main() {
             {
                 type: 'input',
                 name: 'rpcPort',
-                message: 'Entrez le port RPC à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut 8732):',
+                message: 'Enter the RPC port to use (or press Enter to use the default port 8732):',
                 default: '8732'
             },
             {
                 type: 'input',
                 name: 'netPort',
-                message: 'Entrez le port réseau à utiliser (ou appuyez sur Entrée pour utiliser le port par défaut 9732):',
+                message: 'Enter the network port to use (or press Enter to use the default port 9732):',
                 default: '9732'
             }
         ]);
@@ -70,9 +70,9 @@ async function main() {
         const netPortInUse = await checkPortInUse(answers.netPort);
 
         if (rpcPortInUse) {
-            console.log(`Le port RPC ${answers.rpcPort} est déjà utilisé. Veuillez choisir un autre port.`);
+            console.log(`The RPC port ${answers.rpcPort} is already in use. Please choose another port.`);
         } else if (netPortInUse) {
-            console.log(`Le port réseau ${answers.netPort} est déjà utilisé. Veuillez choisir un autre port.`);
+            console.log(`The network port ${answers.netPort} is already in use. Please choose another port.`);
         } else {
             rpcPort = answers.rpcPort;
             netPort = answers.netPort;
@@ -84,19 +84,19 @@ async function main() {
         {
             type: 'input',
             name: 'nodeName',
-            message: 'Voulez-vous personnaliser le nom du nœud? (laisser vide pour le nom par défaut):',
+            message: 'Do you want to customize the node name? (leave blank for default name):',
             default: `${network}-node`
         },
         {
             type: 'input',
             name: 'customPath',
-            message: 'Voulez-vous personnaliser l\'emplacement du nœud? (laisser vide pour l\'emplacement par défaut):',
+            message: 'Do you want to customize the node location? (leave blank for default location):',
             default: BASE_DIR
         },
         {
             type: 'list',
             name: 'snapshotMode',
-            message: 'Choisissez le mode d\'importation du snapshot:',
+            message: 'Choose the snapshot import mode:',
             choices: [
                 { name: 'Safe mode', value: 'safe' },
                 { name: 'Fast mode', value: 'fast' }
@@ -108,21 +108,21 @@ async function main() {
     const fastMode = snapshotMode === 'fast';
 
     if (fs.existsSync(dataDir)) {
-        console.log(`Le dossier ${dataDir} existe déjà.`);
+        console.log(`The directory ${dataDir} already exists.`);
         const { removeExisting } = await inquirer.prompt([
             {
                 type: 'confirm',
                 name: 'removeExisting',
-                message: 'Voulez-vous supprimer le dossier existant et continuer?',
+                message: 'Do you want to remove the existing directory and continue?',
                 default: false
             }
         ]);
 
         if (removeExisting) {
             execSync(`sudo rm -rf ${dataDir}`);
-            console.log(`Le dossier ${dataDir} a été supprimé.`);
+            console.log(`The directory ${dataDir} has been removed.`);
         } else {
-            console.log('Installation annulée.');
+            console.log('Installation canceled.');
             process.exit(0);
         }
     }
@@ -131,25 +131,25 @@ async function main() {
 
     while (true) {
         try {
-            console.log(`Initialisation du noeud...`);
+            console.log('Initializing the node...');
             execSync(`octez-node config init --data-dir "${dataDir}" --network=${network} --history-mode=${mode}`);
-            console.log(`Lancement du noeud pour création de l'identité...`);
+            console.log('Starting the node to create the identity...');
             const nodeProcess = exec(`octez-node run --data-dir "${dataDir}" --net-addr 0.0.0.0:${netPort}`);
 
             try {
                 await waitForIdentityFile(dataDir);
-                console.log('Identité créée, arrêt du noeud...');
+                console.log('Identity created, stopping the node...');
                 nodeProcess.kill('SIGINT');
-                await new Promise(resolve => setTimeout(resolve, 5000)); // Attente pour s'assurer que le processus est bien arrêté
+                await new Promise(resolve => setTimeout(resolve, 5000)); // Wait to ensure the process is fully stopped
                 break;
             } catch (error) {
                 console.error(error.message);
-                console.log('Nettoyage des données du nœud...');
+                console.log('Cleaning node data...');
                 cleanNodeData(dataDir);
-                console.log('Réinitialisation...');
+                console.log('Reinitializing...');
             }
         } catch (error) {
-            console.error(`Erreur lors de l'initialisation du noeud: ${error.message}`);
+            console.error(`Error during node initialization: ${error.message}`);
             process.exit(1);
         }
     }
@@ -158,65 +158,65 @@ async function main() {
 
     while (true) {
         try {
-            console.log(`Téléchargement du snapshot depuis https://snapshots.eu.tzinit.org/${network}/${mode}...`);
+            console.log(`Downloading the snapshot from https://snapshots.eu.tzinit.org/${network}/${mode}...`);
             await downloadFile(`https://snapshots.eu.tzinit.org/${network}/${mode}`, snapshotPath);
             break;
         } catch (error) {
-            console.error(`Erreur lors du téléchargement du snapshot: ${error.message}`);
+            console.error(`Error downloading the snapshot: ${error.message}`);
         }
     }
 
     while (true) {
         try {
-            console.log('Nettoyage des fichiers avant importation du snapshot...');
+            console.log('Cleaning files before snapshot import...');
             cleanNodeDataBeforeImport(dataDir);
             await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
             fs.unlinkSync(snapshotPath);
             break;
         } catch (error) {
-            console.error(`Erreur lors de l'importation du snapshot: ${error.message}`);
-            console.log('Tentative de nettoyage et nouvelle importation du snapshot...');
+            console.error(`Error importing the snapshot: ${error.message}`);
+            console.log('Attempting cleanup and retrying snapshot import...');
             cleanNodeData(dataDir);
         }
     }
 
-    // Assurez-vous que le processus est bien arrêté avant de continuer
+    // Ensure the process is fully stopped before continuing
     try {
-        console.log(`Vérification et arrêt des processus utilisant le port ${netPort}...`);
+        console.log(`Checking and stopping processes using port ${netPort}...`);
         const processesUsingNetPort = execSync(`lsof -i :${netPort}`).toString().split('\n').filter(line => line.includes('octez-nod'));
         processesUsingNetPort.forEach(line => {
             const pid = line.split(/\s+/)[1];
             execSync(`sudo kill ${pid}`);
-            console.log(`Arrêt du processus utilisant le port ${netPort}: ${pid}`);
+            console.log(`Stopped process using port ${netPort}: ${pid}`);
         });
     } catch (e) {
-        // Pas de processus utilisant ce port
-        console.log(`Aucun processus utilisant le port ${netPort} trouvé.`);
+        // No process using this port
+        console.log(`No process using port ${netPort} found.`);
     }
 
-    console.log('Configuration du service systemd...');
+    console.log('Configuring systemd service...');
     try {
         const serviceName = `octez-node-${nodeName}`;
         configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
-        console.log('Service systemd configuré avec succès.');
+        console.log('Systemd service configured successfully.');
     } catch (error) {
-        console.error(`Erreur lors de la configuration du service systemd: ${error.message}`);
+        console.error(`Error configuring systemd service: ${error.message}`);
         process.exit(1);
     }
 
-    // Vérification du statut du service
+    // Check the status of the service
     try {
         const serviceStatus = execSync(`sudo systemctl is-active octez-node-${nodeName}`);
         if (serviceStatus.toString().trim() !== 'active') {
-            throw new Error('Le service n\'a pas démarré correctement');
+            throw new Error('The service did not start correctly');
         }
-        console.log(`Le service octez-node-${nodeName} a démarré avec succès.`);
+        console.log(`The service octez-node-${nodeName} started successfully.`);
     } catch (error) {
-        console.error(`Erreur lors du démarrage du service: ${error.message}`);
+        console.error(`Error starting the service: ${error.message}`);
         process.exit(1);
     }
 
-    console.log('Installation terminée.');
+    console.log('Installation completed.');
     process.exit(0);
 }
 
