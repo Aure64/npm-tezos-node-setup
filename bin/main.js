@@ -195,10 +195,22 @@ async function main() {
 
     console.log('Configuration du service systemd...');
     try {
-        configureServiceUnit(dataDir, rpcPort, netPort, `octez-node-${network}-${nodeName}`);
+        configureServiceUnit(dataDir, rpcPort, netPort, `octez-node-${nodeName}`);
         console.log('Service systemd configuré avec succès.');
     } catch (error) {
         console.error(`Erreur lors de la configuration du service systemd: ${error.message}`);
+        process.exit(1);
+    }
+
+    // Vérification du statut du service
+    try {
+        const serviceStatus = execSync(`sudo systemctl is-active octez-node-${nodeName}`);
+        if (serviceStatus.toString().trim() !== 'active') {
+            throw new Error('Le service n\'a pas démarré correctement');
+        }
+        console.log(`Le service octez-node-${nodeName} a démarré avec succès.`);
+    } catch (error) {
+        console.error(`Erreur lors du démarrage du service: ${error.message}`);
         process.exit(1);
     }
 
