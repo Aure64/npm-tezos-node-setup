@@ -121,6 +121,7 @@ async function main() {
 
     const dataDir = path.join(customPath, nodeName);
     const fastMode = snapshotMode === 'fast';
+    const snapshotPath = path.join('/tmp', 'snapshot');
 
     if (fs.existsSync(dataDir)) {
         console.log(`Le dossier ${dataDir} existe déjà.`);
@@ -173,13 +174,15 @@ async function main() {
 
     try {
         cleanNodeData(dataDir);
-        await importSnapshot(network, mode, dataDir, fastMode);
+        console.log(`Téléchargement du snapshot depuis https://snapshots.eu.tzinit.org/${network}/${mode}...`);
+        await downloadFile(`https://snapshots.eu.tzinit.org/${network}/${mode}`, snapshotPath);
+        await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
     } catch (error) {
         console.error('Erreur lors de l\'importation du snapshot:', error);
         console.log('Tentative de nettoyage et nouvelle importation du snapshot...');
         cleanNodeData(dataDir);
         try {
-            await importSnapshot(network, mode, dataDir, fastMode);
+            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
         } catch (retryError) {
             console.error('Nouvelle erreur lors de l\'importation du snapshot:', retryError);
             process.exit(1);
