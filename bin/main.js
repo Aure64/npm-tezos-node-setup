@@ -154,6 +154,7 @@ async function main() {
                 await waitForIdentityFile(dataDir);
                 console.log('Identité créée, arrêt du noeud...');
                 nodeProcess.kill('SIGINT');
+                execSync(`sudo fuser -k ${netPort}/tcp`);
                 break;
             } catch (error) {
                 console.error(error.message);
