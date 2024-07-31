@@ -154,18 +154,6 @@ async function main() {
         }
     }
 
-    // Assurez-vous que le processus est bien arrêté avant de continuer
-    try {
-        const processesUsingNetPort = execSync(`lsof -i :${netPort}`).toString().split('\n').filter(line => line.includes('octez-node'));
-        processesUsingNetPort.forEach(line => {
-            const pid = line.split(/\s+/)[1];
-            execSync(`sudo kill ${pid}`);
-            console.log(`Arrêt du processus utilisant le port ${netPort}: ${pid}`);
-        });
-    } catch (e) {
-        // Pas de processus utilisant ce port
-    }
-
     const snapshotPath = '/tmp/snapshot';
 
     while (true) {
@@ -190,6 +178,20 @@ async function main() {
             console.log('Tentative de nettoyage et nouvelle importation du snapshot...');
             cleanNodeData(dataDir);
         }
+    }
+
+    // Assurez-vous que le processus est bien arrêté avant de continuer
+    try {
+        console.log(`Vérification et arrêt des processus utilisant le port ${netPort}...`);
+        const processesUsingNetPort = execSync(`lsof -i :${netPort}`).toString().split('\n').filter(line => line.includes('octez-nod'));
+        processesUsingNetPort.forEach(line => {
+            const pid = line.split(/\s+/)[1];
+            execSync(`sudo kill ${pid}`);
+            console.log(`Arrêt du processus utilisant le port ${netPort}: ${pid}`);
+        });
+    } catch (e) {
+        // Pas de processus utilisant ce port
+        console.log(`Aucun processus utilisant le port ${netPort} trouvé.`);
     }
 
     console.log('Configuration du service systemd...');
