@@ -7,7 +7,6 @@ const path = require('path');
 const configureServiceUnit = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
 const fs = require('fs');
-const sudo = require('sudo-prompt');
 const downloadFile = require('../lib/downloadFile');
 
 const BASE_DIR = os.homedir();
@@ -120,7 +119,6 @@ async function main() {
     ]);
 
     const dataDir = path.join(customPath, nodeName);
-
     const fastMode = snapshotMode === 'fast';
 
     if (fs.existsSync(dataDir)) {
@@ -194,7 +192,12 @@ async function main() {
     }
 
     console.log('Configuration du service systemd...');
-    configureServiceUnit(dataDir, rpcPort, netPort, `octez-node-${network}-${nodeName}`);
+    try {
+        await configureServiceUnit(dataDir, rpcPort, netPort, `octez-node-${network}-${nodeName}`);
+    } catch (error) {
+        console.error(`Erreur lors de la configuration du service systemd: ${error.message}`);
+        process.exit(1);
+    }
 
     console.log('Installation terminée.');
 }
