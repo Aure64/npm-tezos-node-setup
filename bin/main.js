@@ -119,7 +119,8 @@ async function main() {
         }
     ]);
 
-    const dataDir = path.join(customPath, nodeName.startsWith('.') ? nodeName : `.${nodeName}`);
+    const dataDir = path.join(customPath, nodeName);
+
     const fastMode = snapshotMode === 'fast';
 
     if (fs.existsSync(dataDir)) {
