@@ -146,31 +146,9 @@ async function main() {
         }
     }
 
-    const { nodeName, customPath, snapshotMode } = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'nodeName',
-            message: 'Would you like to customize the node name? (leave blank for default name):',
-            default: `${network}-node`
-        },
-        {
-            type: 'input',
-            name: 'customPath',
-            message: 'Would you like to customize the node location? (leave blank for default location):',
-            default: BASE_DIR
-        },
-        {
-            type: 'list',
-            name: 'snapshotMode',
-            message: 'Choose the snapshot import mode:',
-            choices: [
-                { name: 'Safe mode', value: 'safe' },
-                { name: 'Fast mode', value: 'fast' }
-            ]
-        }
-    ]);
-
-    const dataDir = path.join(customPath, nodeName);
+    if (!dataDir) {
+        dataDir = path.join(customPath, nodeName);
+    }
     const fastMode = snapshotMode === 'fast';
 
     if (fs.existsSync(dataDir)) {
