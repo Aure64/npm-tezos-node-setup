@@ -6,7 +6,6 @@ const os = require('os');
 const path = require('path');
 const configureServiceUnit = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
-const { updateClientConfig, checkNodeBootstrapped, handleKeyManagement } = require('../lib/bakerManager');
 const fs = require('fs');
 const downloadFile = require('../lib/downloadFile');
 
@@ -22,16 +21,31 @@ async function main() {
         console.log('Existing Tezos nodes:');
         existingNodes.forEach(node => console.log(`- ${node}`));
 
-        const { continueInstallation } = await inquirer.prompt([
+        const { setupBaker } = await inquirer.prompt([
             {
                 type: 'confirm',
-                name: 'continueInstallation',
-                message: 'Tezos nodes are already running. Do you want to continue installing a new node?',
+                name: 'setupBaker',
+                message: 'Tezos nodes are already running. Do you want to set up a baker on the existing node?',
+                default: true
+            }
+        ]);
+
+        if (setupBaker) {
+            console.log('Setting up a baker on the existing node...');
+            // Ajouter ici la logique pour configurer le baker.
+            return;
+        }
+
+        const { setupNewNode } = await inquirer.prompt([
+            {
+                type: 'confirm',
+                name: 'setupNewNode',
+                message: 'Do you want to create a new Tezos node?',
                 default: false
             }
         ]);
 
-        if (!continueInstallation) {
+        if (!setupNewNode) {
             console.log('Installation cancelled.');
             process.exit(0);
         }
@@ -39,20 +53,27 @@ async function main() {
         console.log('No existing Tezos nodes found.');
     }
 
-    // Asking user what they want to do (Node, Baker or Both)
-    const { setupChoice } = await inquirer.prompt([
+    const { setupBakerOnly } = await inquirer.prompt([
         {
             type: 'list',
-            name: 'setupChoice',
-            message: 'What would you like to setup?',
+            name: 'setupType',
+            message: 'What would you like to set up?',
             choices: [
-                { name: 'Node only', value: 'node' },
-                { name: 'Baker only', value: 'baker' },
-                { name: 'Node + Baker', value: 'node_baker' }
+                { name: 'Node only', value: 'nodeOnly' },
+                { name: 'Node + Baker', value: 'nodeAndBaker' },
+                { name: 'Baker only (on an existing node)', value: 'bakerOnly' }
             ]
         }
     ]);
 
+    if (setupBakerOnly === 'bakerOnly') {
+        console.log('Setting up a baker...');
+        // Ajouter ici la logique pour configurer le baker.
+        return;
+    }
+
+    // Logique de création du noeud si nécessaire, puis configuration du baker si choisi
+    // ...
     const { network } = await inquirer.prompt([
         {
             type: 'list',
@@ -158,21 +179,6 @@ async function main() {
 
     fs.mkdirSync(dataDir, { recursive: true });
 
-    // Node Setup
-    if (setupChoice === 'node' || setupChoice === 'node_baker') {
-        await setupNode(network, mode, dataDir, fastMode, nodeName, rpcPort, netPort);
-    }
-
-    // Baker Setup
-    if (setupChoice === 'baker' || setupChoice === 'node_baker') {
-        await setupBaker(network, rpcPort);
-    }
-
-    console.log('Installation completed.');
-    process.exit(0);
-}
-
-async function setupNode(network, mode, dataDir, fastMode, nodeName, rpcPort, netPort) {
     while (true) {
         try {
             console.log('Initializing the node...');
@@ -255,19 +261,16 @@ async function setupNode(network, mode, dataDir, fastMode, nodeName, rpcPort, ne
         console.error(`Error starting the service: ${error.message}`);
         process.exit(1);
     }
-}
 
-async function setupBaker(network, rpcPort) {
-    console.log('Setting up baker...');
+    console.log('Installation completed.');
 
-    // Update octez-client config to use the newly created node
-    updateClientConfig(rpcPort);
+    // If the user chose to set up a baker
+    if (setupBakerOnly === 'nodeAndBaker') {
+        console.log('Setting up baker...');
+        // Ajouter ici la logique pour configurer le baker.
+    }
 
-    // Wait for the node to be bootstrapped
-    checkNodeBootstrapped();
-
-    // Handle key management (ask user to choose or create a key)
-    await handleKeyManagement(network);
+    process.exit(0);
 }
 
 main();
