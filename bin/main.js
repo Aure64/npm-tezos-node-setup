@@ -23,7 +23,7 @@ async function main() {
     let rpcPort;
     let netPort;
     let network;
-
+    let dataDir;
 
     if (existingNodes.length > 0) {
         console.log('Existing Tezos nodes:');
