@@ -1,4 +1,3 @@
-// bin/main.js
 const inquirer = require('inquirer');
 const { installTezosTools } = require('../lib/packageManager');
 const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cleanNodeDataBeforeImport } = require('../lib/snapshotManager');
@@ -8,6 +7,7 @@ const path = require('path');
 const configureServiceUnit = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
 const { setupBaker } = require('../lib/bakerManager');
+const { parseNodeProcess, getNodeNetwork } = require('../lib/nodeManager');
 const fs = require('fs');
 const downloadFile = require('../lib/downloadFile');
 
@@ -24,6 +24,7 @@ async function main() {
     let netPort;
     let network;
 
+
     if (existingNodes.length > 0) {
         console.log('Existing Tezos nodes:');
         existingNodes.forEach(node => console.log(`- ${node}`));
@@ -38,32 +39,12 @@ async function main() {
         ]);
 
         if (setupBakerOption) {
-            const { rpcPortAnswer, netPortAnswer, networkAnswer } = await inquirer.prompt([
-                {
-                    type: 'input',
-                    name: 'rpcPortAnswer',
-                    message: 'Enter the RPC port of the existing node (default is 8732):',
-                    default: '8732'
-                },
-                {
-                    type: 'input',
-                    name: 'netPortAnswer',
-                    message: 'Enter the network port of the existing node (default is 9732):',
-                    default: '9732'
-                },
-                {
-                    type: 'list',
-                    name: 'networkAnswer',
-                    message: 'Choose the network of the existing node:',
-                    choices: ['mainnet', 'ghostnet']
-                }
-            ]);
+            const { rpcPort: detectedRpcPort, dataDir: detectedDataDir } = parseNodeProcess(existingNodes[0]);
+            rpcPort = detectedRpcPort;
+            dataDir = detectedDataDir;
+            network = getNodeNetwork(dataDir);
 
-            rpcPort = rpcPortAnswer;
-            netPort = netPortAnswer;
-            network = networkAnswer;
-
-            console.log('Setting up a baker on the existing node...');
+            console.log(`Setting up a baker on the existing node using RPC port ${rpcPort} and network ${network}...`);
             await setupBaker(rpcPort, network);
             return;
         }
@@ -99,31 +80,14 @@ async function main() {
     ]);
 
     if (setupType === 'bakerOnly') {
-        const { rpcPortAnswer, netPortAnswer, networkAnswer } = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'rpcPortAnswer',
-                message: 'Enter the RPC port of the existing node (default is 8732):',
-                default: '8732'
-            },
-            {
-                type: 'input',
-                name: 'netPortAnswer',
-                message: 'Enter the network port of the existing node (default is 9732):',
-                default: '9732'
-            },
-            {
-                type: 'list',
-                name: 'networkAnswer',
-                message: 'Choose the network of the existing node:',
-                choices: ['mainnet', 'ghostnet']
-            }
-        ]);
+        console.log('Please provide the details of the existing node to set up the baker.');
 
-        rpcPort = rpcPortAnswer;
-        netPort = netPortAnswer;
-        network = networkAnswer;
+        const { rpcPort: detectedRpcPort, dataDir: detectedDataDir } = parseNodeProcess(existingNodes[0]);
+        rpcPort = detectedRpcPort;
+        dataDir = detectedDataDir;
+        network = getNodeNetwork(dataDir);
 
+        console.log(`Setting up a baker on the existing node using RPC port ${rpcPort}, data directory ${dataDir}, and network ${network}...`);
         await setupBaker(rpcPort, network);
         return;
     }
