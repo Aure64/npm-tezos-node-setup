@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const configureServiceUnit = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
+const { updateClientConfig, checkNodeBootstrapped, handleKeyManagement } = require('../lib/bakerManager');
 const fs = require('fs');
 const downloadFile = require('../lib/downloadFile');
 
@@ -37,6 +38,20 @@ async function main() {
     } else {
         console.log('No existing Tezos nodes found.');
     }
+
+    // Asking user what they want to do (Node, Baker or Both)
+    const { setupChoice } = await inquirer.prompt([
+        {
+            type: 'list',
+            name: 'setupChoice',
+            message: 'What would you like to setup?',
+            choices: [
+                { name: 'Node only', value: 'node' },
+                { name: 'Baker only', value: 'baker' },
+                { name: 'Node + Baker', value: 'node_baker' }
+            ]
+        }
+    ]);
 
     const { network } = await inquirer.prompt([
         {
@@ -143,6 +158,21 @@ async function main() {
 
     fs.mkdirSync(dataDir, { recursive: true });
 
+    // Node Setup
+    if (setupChoice === 'node' || setupChoice === 'node_baker') {
+        await setupNode(network, mode, dataDir, fastMode, nodeName, rpcPort, netPort);
+    }
+
+    // Baker Setup
+    if (setupChoice === 'baker' || setupChoice === 'node_baker') {
+        await setupBaker(network, rpcPort);
+    }
+
+    console.log('Installation completed.');
+    process.exit(0);
+}
+
+async function setupNode(network, mode, dataDir, fastMode, nodeName, rpcPort, netPort) {
     while (true) {
         try {
             console.log('Initializing the node...');
@@ -225,9 +255,19 @@ async function main() {
         console.error(`Error starting the service: ${error.message}`);
         process.exit(1);
     }
+}
 
-    console.log('Installation completed.');
-    process.exit(0);
+async function setupBaker(network, rpcPort) {
+    console.log('Setting up baker...');
+
+    // Update octez-client config to use the newly created node
+    updateClientConfig(rpcPort);
+
+    // Wait for the node to be bootstrapped
+    checkNodeBootstrapped();
+
+    // Handle key management (ask user to choose or create a key)
+    await handleKeyManagement(network);
 }
 
 main();
