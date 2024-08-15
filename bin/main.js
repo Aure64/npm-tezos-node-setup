@@ -14,7 +14,6 @@ const downloadFile = require('../lib/downloadFile');
 const BASE_DIR = os.homedir();
 
 async function main() {
-    console.log('Downloading and installing octez-client and octez-node...');
     await installTezosTools();
 
     console.log('Detecting existing Tezos nodes...');
