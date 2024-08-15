@@ -45,7 +45,7 @@ async function main() {
             network = getNodeNetwork(dataDir);
 
             console.log(`Setting up a baker on the existing node using RPC port ${rpcPort} and network ${network}...`);
-            await setupBaker(rpcPort, network);
+            await setupBaker(dataDir, rpcPort, network);
             return;
         }
 
