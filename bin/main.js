@@ -4,7 +4,7 @@ const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cl
 const { exec, execSync } = require('child_process');
 const os = require('os');
 const path = require('path');
-const configureServiceUnit = require('../lib/serviceManager');
+const { configureServiceUnit } = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
 const { setupBaker } = require('../lib/bakerManager');
 const { parseNodeProcess, getNodeNetwork } = require('../lib/nodeManager');
