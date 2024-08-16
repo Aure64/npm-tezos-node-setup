@@ -1,3 +1,4 @@
+const axios = require('axios');
 const inquirer = require('inquirer');
 const { installTezosNode, installTezosBaker } = require('../lib/packageManager');
 const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cleanNodeDataBeforeImport } = require('../lib/snapshotManager');
