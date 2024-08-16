@@ -259,7 +259,7 @@ async function main() {
     while (true) {
         try {
             console.log('Cleaning files before snapshot import...');
-            cleanNodeDataBeforeImport(dataDir);
+            await cleanNodeDataBeforeImport(dataDir);  // Make sure this is correctly referenced
             await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
             fs.unlinkSync(snapshotPath);
             break;
@@ -315,3 +315,4 @@ async function getCurrentProtocol(rpcPort) {
 }
 
 main();
+
