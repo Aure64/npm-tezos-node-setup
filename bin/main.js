@@ -229,6 +229,8 @@ async function main() {
         }
     }
 
+    const serviceName = path.basename(dataDir); // Use the directory name as the service name
+
     while (true) {
         try {
             console.log('Initializing the node...');
@@ -282,7 +284,7 @@ async function main() {
 
     console.log('Configuring systemd service...');
     try {
-        configureServiceUnit(dataDir, rpcPort, netPort, 'octez-node');
+        configureServiceUnit(dataDir, rpcPort, netPort, serviceName); // Use the serviceName based on the directory
         console.log('Systemd service configured successfully.');
     } catch (error) {
         console.error(`Error configuring systemd service: ${error.message}`);
