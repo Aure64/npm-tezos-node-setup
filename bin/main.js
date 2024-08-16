@@ -1,11 +1,11 @@
 const axios = require('axios');
 const inquirer = require('inquirer');
 const { installTezosNode, installTezosBaker } = require('../lib/packageManager');
-const { waitForIdentityFile, cleanNodeDataBeforeImport, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
+const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cleanNodeDataBeforeImport } = require('../lib/snapshotManager');
 const { exec, execSync } = require('child_process');
 const os = require('os');
 const path = require('path');
-const { configureServiceUnit } = require('../lib/serviceManager');
+const configureServiceUnit = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
 const { setupBaker } = require('../lib/bakerManager');
 const { parseNodeProcess, getNodeNetwork } = require('../lib/nodeManager');
@@ -235,7 +235,7 @@ async function main() {
             } catch (error) {
                 console.error(error.message);
                 console.log('Cleaning node data...');
-                cleanNodeDataBeforeImport(dataDir); // Ensuring this function is correctly called
+                cleanNodeData(dataDir);
                 console.log('Reinitializing...');
             }
         } catch (error) {
@@ -259,20 +259,31 @@ async function main() {
     while (true) {
         try {
             console.log('Cleaning files before snapshot import...');
-            await cleanNodeDataBeforeImport(dataDir);
-            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath, netPort);
+            cleanNodeDataBeforeImport(dataDir);
+            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
             fs.unlinkSync(snapshotPath);
             break;
         } catch (error) {
             console.error(`Error importing snapshot: ${error.message}`);
             console.log('Attempting to clean and reimport snapshot...');
-            cleanNodeDataBeforeImport(dataDir); // Ensuring correct function reference
+            cleanNodeData(dataDir);
         }
     }
 
+    console.log(`Checking and stopping processes using port ${netPort}...`);
+    const processes = execSync(`lsof -i :${netPort} -t`).toString().split('\n').filter(pid => pid);
+    processes.forEach(pid => {
+        try {
+            execSync(`sudo kill ${pid}`);
+            console.log(`Stopped process using port ${netPort}: ${pid}`);
+        } catch (error) {
+            console.error(`Error stopping process ${pid}: ${error.message}`);
+        }
+    });
+
     console.log('Configuring systemd service...');
     try {
-        configureServiceUnit(dataDir, rpcPort, netPort, 'octez-node');
+        configureServiceUnit(dataDir, rpcPort, netPort, `octez-node`);
         console.log('Systemd service configured successfully.');
     } catch (error) {
         console.error(`Error configuring systemd service: ${error.message}`);
