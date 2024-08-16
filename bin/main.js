@@ -1,4 +1,3 @@
-const { handleExistingDirectory } = require('../lib/snapshotManager');
 const axios = require('axios');
 const inquirer = require('inquirer');
 const { installTezosNode, installTezosBaker } = require('../lib/packageManager');
@@ -12,6 +11,7 @@ const { setupBaker } = require('../lib/bakerManager');
 const { parseNodeProcess, getNodeNetwork } = require('../lib/nodeManager');
 const fs = require('fs');
 const downloadFile = require('../lib/downloadFile');
+const { handleExistingDirectory } = require('../lib/snapshotManager');
 
 const BASE_DIR = os.homedir();
 
@@ -160,6 +160,11 @@ async function main() {
 
     // Handle existing directory with error handling and prompt
     dataDir = await handleExistingDirectory(dataDir);
+
+    if (!dataDir) {
+        console.log('Installation cancelled.');
+        process.exit(0);
+    }
 
     fs.mkdirSync(dataDir, { recursive: true });
 
