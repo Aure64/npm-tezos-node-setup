@@ -1,7 +1,7 @@
 const axios = require('axios');
 const inquirer = require('inquirer');
 const { installTezosNode, installTezosBaker } = require('../lib/packageManager');
-const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cleanNodeDataBeforeImport } = require('../lib/snapshotManager');
+const { waitForIdentityFile, cleanNodeDataBeforeImport, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
 const { exec, execSync } = require('child_process');
 const os = require('os');
 const path = require('path');
@@ -235,7 +235,7 @@ async function main() {
             } catch (error) {
                 console.error(error.message);
                 console.log('Cleaning node data...');
-                cleanNodeData(dataDir);
+                cleanNodeDataBeforeImport(dataDir); // Ensuring this function is correctly called
                 console.log('Reinitializing...');
             }
         } catch (error) {
@@ -259,14 +259,14 @@ async function main() {
     while (true) {
         try {
             console.log('Cleaning files before snapshot import...');
-            await cleanNodeDataBeforeImport(dataDir);  // Make sure this is correctly referenced
-            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
+            await cleanNodeDataBeforeImport(dataDir);
+            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath, netPort);
             fs.unlinkSync(snapshotPath);
             break;
         } catch (error) {
             console.error(`Error importing snapshot: ${error.message}`);
             console.log('Attempting to clean and reimport snapshot...');
-            cleanNodeData(dataDir);
+            cleanNodeDataBeforeImport(dataDir); // Ensuring correct function reference
         }
     }
 
@@ -292,7 +292,6 @@ async function main() {
     }
 
     if (setupType === 'nodeAndBaker') {
-        // Téléchargement des fichiers nécessaires pour le baker
         const protocolHash = await getCurrentProtocol(rpcPort);
         await installTezosBaker(protocolHash);
 
@@ -315,4 +314,3 @@ async function getCurrentProtocol(rpcPort) {
 }
 
 main();
-
