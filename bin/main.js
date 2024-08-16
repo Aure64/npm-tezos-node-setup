@@ -1,15 +1,15 @@
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 const inquirer = require('inquirer');
-const { installTezosNode, installTezosBaker } = require('../lib/packageManager');
-const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cleanNodeDataBeforeImport } = require('../lib/snapshotManager');
 const { exec, execSync } = require('child_process');
 const os = require('os');
-const path = require('path');
+const { installTezosNode, installTezosBaker } = require('../lib/packageManager');
+const { waitForIdentityFile, cleanNodeData, cleanNodeDataBeforeImport, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
 const { configureServiceUnit } = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
 const { setupBaker } = require('../lib/bakerManager');
 const { parseNodeProcess, getNodeNetwork } = require('../lib/nodeManager');
-const fs = require('fs');
 const downloadFile = require('../lib/downloadFile');
 
 const BASE_DIR = os.homedir();
@@ -122,6 +122,18 @@ async function main() {
         }
     ]);
 
+    const { fastMode } = await inquirer.prompt([
+        {
+            type: 'list',
+            name: 'fastMode',
+            message: 'Choose the import mode:',
+            choices: [
+                { name: 'Fast mode (no checks)', value: true },
+                { name: 'Safe mode (with checks)', value: false }
+            ]
+        }
+    ]);
+
     while (true) {
         const answers = await inquirer.prompt([
             {
@@ -217,8 +229,6 @@ async function main() {
         }
     }
 
-    const fastMode = mode === 'rolling';
-
     while (true) {
         try {
             console.log('Initializing the node...');
@@ -270,48 +280,47 @@ async function main() {
         }
     }
 
-    console.log(`Checking and stopping processes using port ${netPort}...`);
-    const processes = execSync(`lsof -i :${netPort} -t`).toString().split('\n').filter(pid => pid);
-    processes.forEach(pid => {
-        try {
-            execSync(`sudo kill ${pid}`);
-            console.log(`Stopped process using port ${netPort}: ${pid}`);
-        } catch (error) {
-            console.error(`Error stopping process ${pid}: ${error.message}`);
-        }
-    });
-
     console.log('Configuring systemd service...');
     try {
-        configureServiceUnit(dataDir, rpcPort, netPort, `octez-node`);
+        configureServiceUnit(dataDir, rpcPort, netPort, 'octez-node');
         console.log('Systemd service configured successfully.');
     } catch (error) {
         console.error(`Error configuring systemd service: ${error.message}`);
         process.exit(1);
     }
 
-    // Verify the status of the service
-    try {
-        const serviceStatus = execSync(`sudo systemctl is-active octez-node`);
-        if (serviceStatus.toString().trim() !== 'active') {
-            throw new Error('The service did not start correctly');
-        }
-        console.log(`The service octez-node started successfully.`);
-    } catch (error) {
-        console.error(`Error starting the service: ${error.message}`);
-        process.exit(1);
-    }
+    // Wait for the node to fully bootstrap before proceeding
+    console.log('Waiting for the node to fully bootstrap...');
+    await waitForNodeToBootstrap(rpcPort);
+
+    // Get the current protocol after bootstrapping
+    const protocolHash = await getCurrentProtocol(rpcPort);
 
     if (setupType === 'nodeAndBaker') {
-        const protocolHash = await getCurrentProtocol(rpcPort);
-        await installTezosBaker(protocolHash);
-
         console.log('Setting up baker...');
+        await installTezosBaker(protocolHash);
         await setupBaker(dataDir, rpcPort, network);
     }
 
     console.log('Installation completed.');
     process.exit(0);
+}
+
+async function waitForNodeToBootstrap(rpcPort) {
+    while (true) {
+        try {
+            const response = await axios.get(`http://127.0.0.1:${rpcPort}/chains/main/blocks/head/header`);
+            if (response.data.chain_status === 'synced') {
+                console.log('Node is fully bootstrapped.');
+                break;
+            } else {
+                console.log('Node is still bootstrapping...');
+            }
+        } catch (error) {
+            console.error('Failed to retrieve node status, retrying...');
+        }
+        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait for 10 seconds before checking again
+    }
 }
 
 async function getCurrentProtocol(rpcPort) {
