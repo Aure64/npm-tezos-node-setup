@@ -11,7 +11,6 @@ const { setupBaker } = require('../lib/bakerManager');
 const { parseNodeProcess, getNodeNetwork } = require('../lib/nodeManager');
 const fs = require('fs');
 const downloadFile = require('../lib/downloadFile');
-const { handleExistingDirectory } = require('../lib/snapshotManager');
 
 const BASE_DIR = os.homedir();
 
@@ -45,7 +44,6 @@ async function main() {
             dataDir = detectedDataDir;
             network = getNodeNetwork(dataDir);
 
-            // Obtention du hash du protocole pour télécharger le bon baker
             const protocolHash = await getCurrentProtocol(rpcPort);
             await installTezosBaker(protocolHash);
 
@@ -154,19 +152,72 @@ async function main() {
         }
     }
 
-    if (!dataDir) {
-        dataDir = path.join(BASE_DIR, 'tezos-node');
+    while (true) {
+        const { dirName, dirPath } = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'dirName',
+                message: 'Enter the name for the data directory (default is tezos-node):',
+                default: 'tezos-node',
+            },
+            {
+                type: 'input',
+                name: 'dirPath',
+                message: 'Enter the path where the directory should be created:',
+                default: BASE_DIR,
+            },
+        ]);
+
+        dataDir = path.join(dirPath, dirName);
+
+        if (fs.existsSync(dataDir)) {
+            console.log(`The directory ${dataDir} already exists.`);
+            const { action } = await inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'action',
+                    message: `The directory ${dataDir} already exists. What would you like to do?`,
+                    choices: [
+                        { name: 'Remove the existing directory', value: 'remove' },
+                        { name: 'Choose a different directory', value: 'newDir' },
+                        { name: 'Cancel installation', value: 'cancel' },
+                    ],
+                },
+            ]);
+
+            if (action === 'remove') {
+                try {
+                    fs.rmSync(dataDir, { recursive: true, force: true });
+                    console.log(`Directory ${dataDir} removed successfully.`);
+                    break;
+                } catch (error) {
+                    console.error(`Failed to remove the directory: ${error.message}`);
+                    const { retry } = await inquirer.prompt([
+                        {
+                            type: 'confirm',
+                            name: 'retry',
+                            message: 'Do you want to try a different directory?',
+                            default: true,
+                        },
+                    ]);
+                    if (!retry) {
+                        console.log('Installation cancelled.');
+                        process.exit(0);
+                    }
+                }
+            } else if (action === 'newDir') {
+                continue;
+            } else {
+                console.log('Installation cancelled.');
+                process.exit(0);
+            }
+        } else {
+            fs.mkdirSync(dataDir, { recursive: true });
+            break;
+        }
     }
 
-    // Handle existing directory with error handling and prompt
-    dataDir = await handleExistingDirectory(dataDir);
-
-    if (!dataDir) {
-        console.log('Installation cancelled.');
-        process.exit(0);
-    }
-
-    fs.mkdirSync(dataDir, { recursive: true });
+    const fastMode = mode === 'rolling';
 
     while (true) {
         try {
