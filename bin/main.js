@@ -5,7 +5,7 @@ const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cl
 const { exec, execSync } = require('child_process');
 const os = require('os');
 const path = require('path');
-const configureServiceUnit = require('../lib/serviceManager');
+const { configureServiceUnit } = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
 const { setupBaker } = require('../lib/bakerManager');
 const { parseNodeProcess, getNodeNetwork } = require('../lib/nodeManager');
@@ -260,7 +260,7 @@ async function main() {
         try {
             console.log('Cleaning files before snapshot import...');
             cleanNodeDataBeforeImport(dataDir);
-            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
+            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath, netPort);
             fs.unlinkSync(snapshotPath);
             break;
         } catch (error) {
