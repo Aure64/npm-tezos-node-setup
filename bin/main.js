@@ -1,3 +1,4 @@
+const { handleExistingDirectory } = require('../lib/snapshotManager');
 const axios = require('axios');
 const inquirer = require('inquirer');
 const { installTezosNode, installTezosBaker } = require('../lib/packageManager');
@@ -157,27 +158,8 @@ async function main() {
         dataDir = path.join(BASE_DIR, 'tezos-node');
     }
 
-    const fastMode = mode === 'rolling';
-
-    if (fs.existsSync(dataDir)) {
-        console.log(`The directory ${dataDir} already exists.`);
-        const { removeExisting } = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'removeExisting',
-                message: 'Would you like to remove the existing directory and continue?',
-                default: false
-            }
-        ]);
-
-        if (removeExisting) {
-            fs.rmSync(dataDir, { recursive: true, force: true });
-            console.log(`The directory ${dataDir} has been removed.`);
-        } else {
-            console.log('Installation cancelled.');
-            process.exit(0);
-        }
-    }
+    // Handle existing directory with error handling and prompt
+    dataDir = await handleExistingDirectory(dataDir);
 
     fs.mkdirSync(dataDir, { recursive: true });
 
