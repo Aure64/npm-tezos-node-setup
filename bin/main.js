@@ -1,5 +1,5 @@
 const inquirer = require('inquirer');
-const { installTezosTools } = require('../lib/packageManager');
+const { installTezosNode, installTezosBaker } = require('../lib/packageManager');
 const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cleanNodeDataBeforeImport } = require('../lib/snapshotManager');
 const { exec, execSync } = require('child_process');
 const os = require('os');
@@ -14,7 +14,7 @@ const downloadFile = require('../lib/downloadFile');
 const BASE_DIR = os.homedir();
 
 async function main() {
-    await installTezosTools();
+    await installTezosNode();
 
     console.log('Detecting existing Tezos nodes...');
     const existingNodes = detectExistingNodes();
@@ -42,6 +42,10 @@ async function main() {
             rpcPort = detectedRpcPort;
             dataDir = detectedDataDir;
             network = getNodeNetwork(dataDir);
+
+            // Obtention du hash du protocole pour télécharger le bon baker
+            const protocolHash = await getCurrentProtocol(rpcPort);
+            await installTezosBaker(protocolHash);
 
             console.log(`Setting up a baker on the existing node using RPC port ${rpcPort} and network ${network}...`);
             await setupBaker(dataDir, rpcPort, network);
@@ -86,8 +90,11 @@ async function main() {
         dataDir = detectedDataDir;
         network = getNodeNetwork(dataDir);
 
+        const protocolHash = await getCurrentProtocol(rpcPort);
+        await installTezosBaker(protocolHash);
+
         console.log(`Setting up a baker on the existing node using RPC port ${rpcPort}, data directory ${dataDir}, and network ${network}...`);
-        await setupBaker(rpcPort, network);
+        await setupBaker(dataDir, rpcPort, network);
         return;
     }
 
@@ -146,9 +153,10 @@ async function main() {
     }
 
     if (!dataDir) {
-        dataDir = path.join(customPath, nodeName);
+        dataDir = path.join(BASE_DIR, 'tezos-node');
     }
-    const fastMode = snapshotMode === 'fast';
+
+    const fastMode = mode === 'rolling';
 
     if (fs.existsSync(dataDir)) {
         console.log(`The directory ${dataDir} already exists.`);
@@ -223,20 +231,9 @@ async function main() {
         }
     }
 
-    console.log(`Checking and stopping processes using port ${netPort}...`);
-    const processes = execSync(`lsof -i :${netPort} -t`).toString().split('\n').filter(pid => pid);
-    processes.forEach(pid => {
-        try {
-            execSync(`sudo kill ${pid}`);
-            console.log(`Stopped process using port ${netPort}: ${pid}`);
-        } catch (error) {
-            console.error(`Error stopping process ${pid}: ${error.message}`);
-        }
-    });
-
     console.log('Configuring systemd service...');
     try {
-        configureServiceUnit(dataDir, rpcPort, netPort, `octez-node-${nodeName}`);
+        configureServiceUnit(dataDir, rpcPort, netPort, 'octez-node');
         console.log('Systemd service configured successfully.');
     } catch (error) {
         console.error(`Error configuring systemd service: ${error.message}`);
@@ -245,23 +242,37 @@ async function main() {
 
     // Verify the status of the service
     try {
-        const serviceStatus = execSync(`sudo systemctl is-active octez-node-${nodeName}`);
+        const serviceStatus = execSync(`sudo systemctl is-active octez-node`);
         if (serviceStatus.toString().trim() !== 'active') {
             throw new Error('The service did not start correctly');
         }
-        console.log(`The service octez-node-${nodeName} started successfully.`);
+        console.log(`The service octez-node started successfully.`);
     } catch (error) {
         console.error(`Error starting the service: ${error.message}`);
         process.exit(1);
     }
 
     if (setupType === 'nodeAndBaker') {
+        // Téléchargement des fichiers nécessaires pour le baker
+        const protocolHash = await getCurrentProtocol(rpcPort);
+        await installTezosBaker(protocolHash);
+
         console.log('Setting up baker...');
-        await setupBaker(rpcPort, network);
+        await setupBaker(dataDir, rpcPort, network);
     }
 
     console.log('Installation completed.');
     process.exit(0);
+}
+
+async function getCurrentProtocol(rpcPort) {
+    try {
+        const response = await axios.get(`http://127.0.0.1:${rpcPort}/chains/main/blocks/head`);
+        return response.data.protocol;
+    } catch (error) {
+        console.error('Failed to retrieve current protocol:', error.message);
+        throw error;
+    }
 }
 
 main();
