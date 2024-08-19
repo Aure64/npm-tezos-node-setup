@@ -40,8 +40,16 @@ This project automates the installation and configuration of a Tezos node on a L
 2. Install the project dependencies and start the script :
 
     ```bash
-    npm start
+    npm install
     ```
+
+## Usage
+
+To run the main script and configure a Tezos node, run :
+
+```bash
+npm start
+```
 
 ### Installation process
 
