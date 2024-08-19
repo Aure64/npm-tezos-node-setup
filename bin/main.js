@@ -292,7 +292,6 @@ async function main() {
     }
 
     // Wait for the node to fully bootstrap before proceeding
-    console.log('Waiting for the node to fully bootstrapp...');
     await waitForNodeToBootstrap(rpcPort);
 
     // Get the current protocol after bootstrapping
