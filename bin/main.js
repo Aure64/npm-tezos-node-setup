@@ -11,6 +11,8 @@ const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
 const { setupBaker } = require('../lib/bakerManager');
 const { parseNodeProcess, getNodeNetwork, waitForNodeToBootstrap, getCurrentProtocol } = require('../lib/nodeManager');
 const downloadFile = require('../lib/downloadFile');
+const { postBakerSetup } = require('../lib/monitoringManager');
+
 
 const BASE_DIR = os.homedir();
 
@@ -301,6 +303,7 @@ async function main() {
         console.log('Setting up baker...');
         await installTezosBaker(protocolHash);
         await setupBaker(dataDir, rpcPort, network);
+        await postBakerSetup();
     }
 
     console.log('Installation completed.');
