@@ -9,7 +9,7 @@ const { waitForIdentityFile, cleanNodeData, cleanNodeDataBeforeImport, importSna
 const { configureServiceUnit } = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
 const { setupBaker } = require('../lib/bakerManager');
-const { parseNodeProcess, getNodeNetwork } = require('../lib/nodeManager');
+const { parseNodeProcess, getNodeNetwork, waitForNodeToBootstrap, getCurrentProtocol } = require('../lib/nodeManager');
 const downloadFile = require('../lib/downloadFile');
 
 const BASE_DIR = os.homedir();
@@ -308,31 +308,6 @@ async function main() {
     process.exit(0);
 }
 
-async function waitForNodeToBootstrap(rpcPort) {
-    while (true) {
-        try {
-            const response = await axios.get(`http://127.0.0.1:${rpcPort}/chains/main/blocks/head/header`);
-            if (response.data.chain_status === 'synced') {
-                console.log('Node is fully bootstrapped.');
-                break;
-            } else {
-                console.log('Node is still bootstrapping...');
-            }
-        } catch (error) {
-            console.error('Failed to retrieve node status, retrying...');
-        }
-        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait for 10 seconds before checking again
-    }
-}
 
-async function getCurrentProtocol(rpcPort) {
-    try {
-        const response = await axios.get(`http://127.0.0.1:${rpcPort}/chains/main/blocks/head`);
-        return response.data.protocol;
-    } catch (error) {
-        console.error('Failed to retrieve current protocol:', error.message);
-        throw error;
-    }
-}
 
 main();
