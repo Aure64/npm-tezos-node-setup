@@ -284,7 +284,7 @@ async function main() {
 
     console.log('Configuring systemd service...');
     try {
-        configureServiceUnit(dataDir, rpcPort, netPort, serviceName); // Use the serviceName based on the directory
+        configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
         console.log('Systemd service configured successfully.');
     } catch (error) {
         console.error(`Error configuring systemd service: ${error.message}`);
