@@ -1,20 +1,21 @@
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
 const inquirer = require('inquirer');
-const { installTezosTools } = require('../lib/packageManager');
-const { waitForIdentityFile, cleanNodeData, importSnapshot, getSnapshotSizes, cleanNodeDataBeforeImport } = require('../lib/snapshotManager');
 const { exec, execSync } = require('child_process');
 const os = require('os');
-const path = require('path');
-const configureServiceUnit = require('../lib/serviceManager');
+const { installTezosNode, installTezosBaker } = require('../lib/packageManager');
+const { waitForIdentityFile, cleanNodeData, cleanNodeDataBeforeImport, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
+const { configureServiceUnit } = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
 const { setupBaker } = require('../lib/bakerManager');
-const { parseNodeProcess, getNodeNetwork } = require('../lib/nodeManager');
-const fs = require('fs');
+const { parseNodeProcess, getNodeNetwork, waitForNodeToBootstrap, getCurrentProtocol } = require('../lib/nodeManager');
 const downloadFile = require('../lib/downloadFile');
 
 const BASE_DIR = os.homedir();
 
 async function main() {
-    await installTezosTools();
+    await installTezosNode();
 
     console.log('Detecting existing Tezos nodes...');
     const existingNodes = detectExistingNodes();
@@ -42,6 +43,9 @@ async function main() {
             rpcPort = detectedRpcPort;
             dataDir = detectedDataDir;
             network = getNodeNetwork(dataDir);
+
+            const protocolHash = await getCurrentProtocol(rpcPort);
+            await installTezosBaker(protocolHash);
 
             console.log(`Setting up a baker on the existing node using RPC port ${rpcPort} and network ${network}...`);
             await setupBaker(dataDir, rpcPort, network);
@@ -86,8 +90,11 @@ async function main() {
         dataDir = detectedDataDir;
         network = getNodeNetwork(dataDir);
 
+        const protocolHash = await getCurrentProtocol(rpcPort);
+        await installTezosBaker(protocolHash);
+
         console.log(`Setting up a baker on the existing node using RPC port ${rpcPort}, data directory ${dataDir}, and network ${network}...`);
-        await setupBaker(rpcPort, network);
+        await setupBaker(dataDir, rpcPort, network);
         return;
     }
 
@@ -111,6 +118,18 @@ async function main() {
             choices: [
                 { name: `full (${snapshotSizes.full} GB)`, value: 'full' },
                 { name: `rolling (${snapshotSizes.rolling} GB)`, value: 'rolling' }
+            ]
+        }
+    ]);
+
+    const { fastMode } = await inquirer.prompt([
+        {
+            type: 'list',
+            name: 'fastMode',
+            message: 'Choose the import mode:',
+            choices: [
+                { name: 'Fast mode (no checks)', value: true },
+                { name: 'Safe mode (with checks)', value: false }
             ]
         }
     ]);
@@ -145,32 +164,72 @@ async function main() {
         }
     }
 
-    if (!dataDir) {
-        dataDir = path.join(customPath, nodeName);
-    }
-    const fastMode = snapshotMode === 'fast';
-
-    if (fs.existsSync(dataDir)) {
-        console.log(`The directory ${dataDir} already exists.`);
-        const { removeExisting } = await inquirer.prompt([
+    while (true) {
+        const { dirName, dirPath } = await inquirer.prompt([
             {
-                type: 'confirm',
-                name: 'removeExisting',
-                message: 'Would you like to remove the existing directory and continue?',
-                default: false
-            }
+                type: 'input',
+                name: 'dirName',
+                message: 'Enter the name for the data directory (default is tezos-node):',
+                default: 'tezos-node',
+            },
+            {
+                type: 'input',
+                name: 'dirPath',
+                message: 'Enter the path where the directory should be created:',
+                default: BASE_DIR,
+            },
         ]);
 
-        if (removeExisting) {
-            fs.rmSync(dataDir, { recursive: true, force: true });
-            console.log(`The directory ${dataDir} has been removed.`);
+        dataDir = path.join(dirPath, dirName);
+
+        if (fs.existsSync(dataDir)) {
+            console.log(`The directory ${dataDir} already exists.`);
+            const { action } = await inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'action',
+                    message: `The directory ${dataDir} already exists. What would you like to do?`,
+                    choices: [
+                        { name: 'Remove the existing directory', value: 'remove' },
+                        { name: 'Choose a different directory', value: 'newDir' },
+                        { name: 'Cancel installation', value: 'cancel' },
+                    ],
+                },
+            ]);
+
+            if (action === 'remove') {
+                try {
+                    fs.rmSync(dataDir, { recursive: true, force: true });
+                    console.log(`Directory ${dataDir} removed successfully.`);
+                    break;
+                } catch (error) {
+                    console.error(`Failed to remove the directory: ${error.message}`);
+                    const { retry } = await inquirer.prompt([
+                        {
+                            type: 'confirm',
+                            name: 'retry',
+                            message: 'Do you want to try a different directory?',
+                            default: true,
+                        },
+                    ]);
+                    if (!retry) {
+                        console.log('Installation cancelled.');
+                        process.exit(0);
+                    }
+                }
+            } else if (action === 'newDir') {
+                continue;
+            } else {
+                console.log('Installation cancelled.');
+                process.exit(0);
+            }
         } else {
-            console.log('Installation cancelled.');
-            process.exit(0);
+            fs.mkdirSync(dataDir, { recursive: true });
+            break;
         }
     }
 
-    fs.mkdirSync(dataDir, { recursive: true });
+    const serviceName = path.basename(dataDir); // Use the directory name as the service name
 
     while (true) {
         try {
@@ -213,7 +272,7 @@ async function main() {
         try {
             console.log('Cleaning files before snapshot import...');
             cleanNodeDataBeforeImport(dataDir);
-            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath);
+            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath, netPort);
             fs.unlinkSync(snapshotPath);
             break;
         } catch (error) {
@@ -223,45 +282,31 @@ async function main() {
         }
     }
 
-    console.log(`Checking and stopping processes using port ${netPort}...`);
-    const processes = execSync(`lsof -i :${netPort} -t`).toString().split('\n').filter(pid => pid);
-    processes.forEach(pid => {
-        try {
-            execSync(`sudo kill ${pid}`);
-            console.log(`Stopped process using port ${netPort}: ${pid}`);
-        } catch (error) {
-            console.error(`Error stopping process ${pid}: ${error.message}`);
-        }
-    });
-
     console.log('Configuring systemd service...');
     try {
-        configureServiceUnit(dataDir, rpcPort, netPort, `octez-node-${nodeName}`);
+        configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
         console.log('Systemd service configured successfully.');
     } catch (error) {
         console.error(`Error configuring systemd service: ${error.message}`);
         process.exit(1);
     }
 
-    // Verify the status of the service
-    try {
-        const serviceStatus = execSync(`sudo systemctl is-active octez-node-${nodeName}`);
-        if (serviceStatus.toString().trim() !== 'active') {
-            throw new Error('The service did not start correctly');
-        }
-        console.log(`The service octez-node-${nodeName} started successfully.`);
-    } catch (error) {
-        console.error(`Error starting the service: ${error.message}`);
-        process.exit(1);
-    }
+    // Wait for the node to fully bootstrap before proceeding
+    await waitForNodeToBootstrap(rpcPort);
+
+    // Get the current protocol after bootstrapping
+    const protocolHash = await getCurrentProtocol(rpcPort);
 
     if (setupType === 'nodeAndBaker') {
         console.log('Setting up baker...');
-        await setupBaker(rpcPort, network);
+        await installTezosBaker(protocolHash);
+        await setupBaker(dataDir, rpcPort, network);
     }
 
     console.log('Installation completed.');
     process.exit(0);
 }
+
+
 
 main();
