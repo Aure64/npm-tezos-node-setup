@@ -4,9 +4,10 @@
   "description": "Setup Tezos node with one command",
   "main": "index.js",
   "bin": {
-    "tezos-node": "./bin/tezos-node"
+    "main": "./bin/main.js"
   },
   "scripts": {
+    "start": "node bin/main.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Votre Nom",
