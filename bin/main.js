@@ -15,6 +15,7 @@ const downloadFile = require('../lib/downloadFile');
 const BASE_DIR = os.homedir();
 
 async function main() {
+
     await installTezosNode();
 
     console.log('Detecting existing Tezos nodes...');
@@ -306,7 +307,5 @@ async function main() {
     console.log('Installation completed.');
     process.exit(0);
 }
-
-
 
 main();
