@@ -4,7 +4,7 @@ const axios = require('axios');
 const inquirer = require('inquirer');
 const { exec, execSync } = require('child_process');
 const os = require('os');
-const { installTezosNode, installTezosBaker } = require('../lib/packageManager');
+const { installTezosNode, installTezosBaker, installZcashParams } = require('../lib/packageManager');
 const { waitForIdentityFile, cleanNodeData, cleanNodeDataBeforeImport, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
 const { configureServiceUnit } = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
@@ -16,6 +16,7 @@ const BASE_DIR = os.homedir();
 
 async function main() {
 
+    await installZcashParams();
     await installTezosNode();
 
     console.log('Detecting existing Tezos nodes...');
