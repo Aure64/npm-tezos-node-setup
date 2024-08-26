@@ -46,7 +46,12 @@ async function main() {
             dataDir = detectedDataDir;
             network = getNodeNetwork(dataDir);
 
-            const protocolHash = await getCurrentProtocol(rpcPort);
+            try {
+                const protocolHash = await getCurrentProtocol(rpcPort);
+            } catch (error) {
+                console.error(`Could not retrieve the current protocol after several attempts: ${error.message}`);
+                process.exit(1);
+            }
             await installTezosBaker(protocolHash);
 
             console.log(`Setting up a baker on the existing node using RPC port ${rpcPort} and network ${network}...`);
@@ -92,7 +97,13 @@ async function main() {
         dataDir = detectedDataDir;
         network = getNodeNetwork(dataDir);
 
-        const protocolHash = await getCurrentProtocol(rpcPort);
+        try {
+            const protocolHash = await getCurrentProtocol(rpcPort);
+            console.log(`Current protocol: ${protocolHash}`);
+        } catch (error) {
+            console.error(`Could not retrieve the current protocol after several attempts: ${error.message}`);
+            process.exit(1);
+        }
         await installTezosBaker(protocolHash);
 
         console.log(`Setting up a baker on the existing node using RPC port ${rpcPort}, data directory ${dataDir}, and network ${network}...`);
@@ -297,7 +308,13 @@ async function main() {
     await waitForNodeToBootstrap(rpcPort);
 
     // Get the current protocol after bootstrapping
-    const protocolHash = await getCurrentProtocol(rpcPort);
+    try {
+        const protocolHash = await getCurrentProtocol(rpcPort);
+        console.log(`Current protocol: ${protocolHash}`);
+    } catch (error) {
+        console.error(`Could not retrieve the current protocol after several attempts: ${error.message}`);
+        process.exit(1);
+    }
 
     if (setupType === 'nodeAndBaker') {
         console.log('Setting up baker...');
