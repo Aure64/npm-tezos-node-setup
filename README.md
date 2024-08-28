@@ -68,6 +68,7 @@ npm start
 ### Notes
 
 - If a node is already running, the script will prompt you to configure a Baker on that node.
+- Sometimes, the identity is not created directly, just wait and it will be created.
 - If a port conflict is detected, the script will ask you to choose another available port.
 - The script includes automatic restart mechanisms to ensure that the Tezos node is properly launched and running in the background.
 
