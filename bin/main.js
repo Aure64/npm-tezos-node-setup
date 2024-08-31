@@ -8,7 +8,7 @@ const { installTezosNode, installTezosBaker, installZcashParams } = require('../
 const { waitForIdentityFile, cleanNodeData, cleanNodeDataBeforeImport, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
 const { configureServiceUnit } = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
-const { setupBaker } = require('../lib/bakerManager');
+const { setupBaker, getTzAddress } = require('../lib/bakerManager');
 const { parseNodeProcess, getNodeNetwork, waitForNodeToBootstrap, getCurrentProtocol } = require('../lib/nodeManager');
 const downloadFile = require('../lib/downloadFile');
 const { postBakerSetup } = require('../lib/monitoringManager');
@@ -66,8 +66,38 @@ async function main() {
             await installTezosBaker(protocolHash);
             console.log(`Setting up a baker on the existing node using RPC port ${rpcPort} and network ${network}...`);
             await setupBaker(dataDir, rpcPort, network);
+            const tzAddress = getTzAddress();
+            console.log(`Final chosen tzAddress: ${tzAddress}`);
+            await postBakerSetup(tzAddress);
             return;
         }
+
+        if (setupType === 'monitorOnly') {
+            // For monitoring only, get the tzAddress and proceed directly to setup monitoring
+            console.log('Please provide the details of the baker you wish to monitor.');
+
+            const { rpcPort: detectedRpcPort, dataDir: detectedDataDir } = parseNodeProcess(existingNodes[0]);
+            rpcPort = detectedRpcPort;
+            dataDir = detectedDataDir;
+            network = getNodeNetwork(dataDir);
+
+            let tzAddress;
+            const { address } = await inquirer.prompt([
+                {
+                    type: 'input',
+                    name: 'address',
+                    message: 'Enter the tzAddress of the baker you want to monitor:',
+                    validate: input => input.startsWith('tz1') || 'Address must start with tz1'
+                }
+            ]);
+
+            tzAddress = address;
+            console.log(`Final chosen tzAddress: ${tzAddress}`);
+
+            await postBakerSetup(tzAddress);
+            return;
+        }
+
 
         // Ask if the user wants to create a new Tezos node
         const { setupNewNode } = await inquirer.prompt([
@@ -96,7 +126,8 @@ async function main() {
             choices: [
                 { name: 'Node only', value: 'nodeOnly' },
                 { name: 'Node + Baker', value: 'nodeAndBaker' },
-                { name: 'Baker only (on an existing node)', value: 'bakerOnly' }
+                { name: 'Baker only (on an existing node)', value: 'bakerOnly' },
+                { name: 'Monitor only', value: 'monitorOnly' }
             ]
         }
     ]);
@@ -121,6 +152,10 @@ async function main() {
         await installTezosBaker(protocolHash);
         console.log(`Setting up a baker on the existing node using RPC port ${rpcPort}, data directory ${dataDir}, and network ${network}...`);
         await setupBaker(dataDir, rpcPort, network);
+        const tzAddress = getTzAddress();
+        console.log(`Final chosen tzAddress: ${tzAddress}`);
+
+        await postBakerSetup(tzAddress);
         return;
     }
 
@@ -344,7 +379,7 @@ async function main() {
         console.log('Setting up baker...');
         await installTezosBaker(protocolHash);
         await setupBaker(dataDir, rpcPort, network);
-        await postBakerSetup();
+        await postBakerSetup(tzAddress);
     }
 
     console.log('Installation completed.');
