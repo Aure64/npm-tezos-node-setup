@@ -23,7 +23,7 @@ This project automates the installation and configuration of a Tezos node on a L
 - **Monitoring with pyrometer** :
   - Launch Pyrometer service.
   - Add the baker address + the alias on the dasbhoard UI
-  - Monitor the node too
+  - Monitor the node
 
 
 
