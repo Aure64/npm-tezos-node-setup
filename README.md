@@ -29,13 +29,13 @@ This project automates the installation and configuration of a Tezos node on a L
 
 ## Prerequisites
 
-- **NodeJS **: Version 16 or higher. (NVM setup needed)
+- **NodeJS**: Version 16 or higher. (NVM setup needed)
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash  
 source ~/.bashrc    
 nvm install --lts 
 ```                                                                     
-- **NPM**: Node Package Manager (available already with NVM).
+- **NPM**: Node Package Manager (already available with NVM).
 - **Git**: To clone the repository.
 - **User with sudo access**: Required to install packages and configure `systemd` services.
 ```bash
@@ -98,5 +98,3 @@ Contributions are welcome! To report a bug or suggest an improvement, please ope
 ## License
 
 This project is licensed under the MIT license. 
-
-Translated with DeepL.com (free version)
