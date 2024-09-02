@@ -2,7 +2,7 @@
 
 ## Description
 
-This project automates the installation and configuration of a Tezos node on a Linux machine. It manages the download and installation of the necessary packages, configures the Tezos node, allows snapshots to be imported to quickly synchronise the blockchain, and offers simplified configuration for the baking service.
+This project automates the installation and configuration of a Tezos node on a Linux machine. It manages the download and installation of the necessary packages, configures the Tezos node, allows snapshots to be imported to quickly synchronise the blockchain, offers simplified configuration for the baking service and monitoring.
 
 ## Features
 
@@ -20,13 +20,31 @@ This project automates the installation and configuration of a Tezos node on a L
   - Import of existing keys or generation of new keys.
   - Possibility of connecting a Ledger or importing a secret key.
   - Baking fund management with faucet integration on test networks.
+- **Monitoring with pyrometer** :
+  - Launch Pyrometer service.
+  - Add the baker address + the alias on the dasbhoard UI
+  - Monitor the node too
+
+
 
 ## Prerequisites
 
-- **Node.js**: Version 14 or higher.
-- **NPM**: Node Package Manager.
+- **NodeJS **: Version 16 or higher. (NVM setup needed)
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash  
+source ~/.bashrc    
+nvm install --lts 
+```                                                                     
+- **NPM**: Node Package Manager (available already with NVM).
 - **Git**: To clone the repository.
-- **sudo access**: Required to install packages and configure `systemd` services.
+- **User with sudo access**: Required to install packages and configure `systemd` services.
+```bash
+sudo useradd -m -s /bin/bash tezos
+sudo passwd tezos
+sudo usermod -aG sudo tezos
+su - tezos
+```
+
 
 ## Installation
 
@@ -59,11 +77,12 @@ npm start
    - Choice of history mode (full or rolling).
    - Configure RPC and P2P ports.
    - Import a snapshot for rapid synchronisation.
-3. **Baker configuration** (optional) :
+3. **Bootstrap monitoring** : The script monitors the state of the node until it is fully synchronised with the network.
+4. **Baker configuration** (optional) :
    - Import or generate keys.
    - Configuration of the `systemd` service for the Baker.
    - Manage the funds required for baking.
-4. **Bootstrap monitoring** : The script monitors the state of the node until it is fully synchronised with the network.
+5. **Baker monitoring** : The script monitors the state of the node and the baker on an web interface.
 
 ### Notes
 
