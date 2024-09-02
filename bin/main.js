@@ -67,8 +67,8 @@ async function main() {
             console.log(`Setting up a baker on the existing node using RPC port ${rpcPort} and network ${network}...`);
             await setupBaker(dataDir, rpcPort, network);
 
-            // Retrieve the selected baker address after setup
-            const selectedBakerAddress = getAddress();
+            // Retrieve the selected baker address and alias after setup
+            const { address: selectedBakerAddress, alias: bakerAlias } = getAddress();
 
             // Prompt the user to set up monitoring for the baker
             const { setupMonitoring } = await inquirer.prompt([
@@ -81,7 +81,6 @@ async function main() {
             ]);
 
             if (setupMonitoring) {
-                console.log(`Selected Baker Address main: ${selectedBakerAddress}`);
                 await postBakerSetup();
             }
 
@@ -141,8 +140,8 @@ async function main() {
         console.log(`Setting up a baker on the existing node using RPC port ${rpcPort}, data directory ${dataDir}, and network ${network}...`);
         await setupBaker(dataDir, rpcPort, network);
 
-        // Retrieve the selected baker address after setup
-        const selectedBakerAddress = getAddress();
+        // Retrieve the selected baker address and alias after setup
+        const { address: selectedBakerAddress, alias: bakerAlias } = getAddress();
 
 
         const { setupMonitoring } = await inquirer.prompt([
@@ -383,8 +382,8 @@ async function main() {
         await installTezosBaker(protocolHash);
         await setupBaker(dataDir, rpcPort, network);
 
-        // Retrieve the selected baker address after setup
-        const selectedBakerAddress = getAddress();
+        // Retrieve the selected baker address and alias after setup
+        const { address: selectedBakerAddress, alias: bakerAlias } = getAddress();
 
         const { setupMonitoring } = await inquirer.prompt([
             {
