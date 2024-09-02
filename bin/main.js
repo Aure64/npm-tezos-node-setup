@@ -8,9 +8,11 @@ const { installTezosNode, installTezosBaker, installZcashParams } = require('../
 const { waitForIdentityFile, cleanNodeData, cleanNodeDataBeforeImport, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
 const { configureServiceUnit } = require('../lib/serviceManager');
 const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
-const { setupBaker } = require('../lib/bakerManager');
+const { setupBaker, getAddress } = require('../lib/bakerManager');
+const { postBakerSetup } = require('../lib/monitoringManager'); // Import de la fonction de monitoring
 const { parseNodeProcess, getNodeNetwork, waitForNodeToBootstrap, getCurrentProtocol } = require('../lib/nodeManager');
 const downloadFile = require('../lib/downloadFile');
+
 
 const BASE_DIR = os.homedir();
 
@@ -64,6 +66,25 @@ async function main() {
             await installTezosBaker(protocolHash);
             console.log(`Setting up a baker on the existing node using RPC port ${rpcPort} and network ${network}...`);
             await setupBaker(dataDir, rpcPort, network);
+
+            // Retrieve the selected baker address after setup
+            const selectedBakerAddress = getAddress();
+
+            // Prompt the user to set up monitoring for the baker
+            const { setupMonitoring } = await inquirer.prompt([
+                {
+                    type: 'confirm',
+                    name: 'setupMonitoring',
+                    message: 'Do you want to set up monitoring for the baker?',
+                    default: true
+                }
+            ]);
+
+            if (setupMonitoring) {
+                console.log(`Selected Baker Address main: ${selectedBakerAddress}`);
+                await postBakerSetup();
+            }
+
             return;
         }
 
@@ -119,6 +140,25 @@ async function main() {
         await installTezosBaker(protocolHash);
         console.log(`Setting up a baker on the existing node using RPC port ${rpcPort}, data directory ${dataDir}, and network ${network}...`);
         await setupBaker(dataDir, rpcPort, network);
+
+        // Retrieve the selected baker address after setup
+        const selectedBakerAddress = getAddress();
+
+
+        const { setupMonitoring } = await inquirer.prompt([
+            {
+                type: 'confirm',
+                name: 'setupMonitoring',
+                message: 'Do you want to set up monitoring for the baker?',
+                default: true
+            }
+        ]);
+
+        if (setupMonitoring) {
+            console.log(`Selected Baker Address Main: ${selectedBakerAddress}`);
+            await postBakerSetup();
+        }
+
         return;
     }
 
@@ -342,6 +382,23 @@ async function main() {
         console.log('Setting up baker...');
         await installTezosBaker(protocolHash);
         await setupBaker(dataDir, rpcPort, network);
+
+        // Retrieve the selected baker address after setup
+        const selectedBakerAddress = getAddress();
+
+        const { setupMonitoring } = await inquirer.prompt([
+            {
+                type: 'confirm',
+                name: 'setupMonitoring',
+                message: 'Do you want to set up monitoring for the baker?',
+                default: true
+            }
+        ]);
+
+        if (setupMonitoring) {
+            console.log(`Selected Baker Address Main: ${selectedBakerAddress}`);
+            await postBakerSetup();
+        }
     }
 
     console.log('Installation completed.');
