@@ -17,6 +17,24 @@ const downloadFile = require('../lib/downloadFile');
 const BASE_DIR = os.homedir();
 
 async function main() {
+
+    if (process.getuid() === 0) {
+        console.warn('WARNING: You are running this script as the root user. This may cause issues with permissions.');
+
+        const { continueAsRoot } = await inquirer.prompt([
+            {
+                type: 'confirm',
+                name: 'continueAsRoot',
+                message: 'Are you sure you want to continue as root?',
+                default: false
+            }
+        ]);
+
+        if (!continueAsRoot) {
+            console.log('Please re-run the script with a non-root user.');
+            process.exit(0);
+        }
+    }
     // Install Zcash parameters if they are not already present
     await installZcashParams();
 
