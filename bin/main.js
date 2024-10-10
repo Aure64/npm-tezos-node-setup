@@ -1,425 +1,143 @@
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
-const inquirer = require('inquirer');
-const { exec, execSync } = require('child_process');
-const os = require('os');
-const { installTezosNode, installTezosBaker, installZcashParams } = require('../lib/packageManager');
-const { waitForIdentityFile, cleanNodeData, cleanNodeDataBeforeImport, importSnapshot, getSnapshotSizes } = require('../lib/snapshotManager');
-const { configureServiceUnit } = require('../lib/serviceManager');
-const { checkPortInUse, detectExistingNodes } = require('../lib/detect');
+const { installTezosNode, installZcashParams } = require('../lib/packageManager');
+const { detectExistingNodes } = require('../lib/detect');
+const { setupL1Node } = require('../lib/layer1');
+const { installTezosBaker } = require('../lib/packageManager');
 const { setupBaker, getAddress } = require('../lib/bakerManager');
-const { postBakerSetup } = require('../lib/monitoringManager'); // Import de la fonction de monitoring
-const { parseNodeProcess, getNodeNetwork, waitForNodeToBootstrap, getCurrentProtocol } = require('../lib/nodeManager');
-const downloadFile = require('../lib/downloadFile');
-
-
-const BASE_DIR = os.homedir();
+const { postBakerSetup } = require('../lib/monitoringManager');
+const { getSnapshotSizes } = require('../lib/snapshotManager');
+const { getCurrentProtocol, parseNodeProcess, getNodeNetwork } = require('../lib/nodeManager');
+const { setupEtherlink } = require('../lib/etherlink');
+const {
+    askBakerSetup,
+    askNewNodeSetup,
+    askNetwork,
+    askHistoryMode,
+    askSetupType,
+    askSetupMonitoring,
+    askSmartRollupSetup
+} = require('../lib/choice');
+const inquirer = require('inquirer');
 
 async function main() {
+    console.log('Starting the setup process...');
+    try {
+        // Install Zcash parameters and Tezos binaries
+        console.log('Installing Zcash parameters and Tezos binaries...');
+        await installZcashParams();
+        await installTezosNode();
 
-    if (process.getuid() === 0) {
-        console.warn('WARNING: You are running this script as the root user. This may cause issues with permissions.');
+        console.log('Detecting existing Tezos nodes...');
+        const existingNodes = detectExistingNodes();
 
-        const { continueAsRoot } = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'continueAsRoot',
-                message: 'Are you sure you want to continue as root?',
-                default: false
+        // Handle the case of existing Tezos nodes
+        if (existingNodes.length > 0) {
+            console.log('Existing Tezos nodes detected:');
+            existingNodes.forEach(node => console.log(`- ${node}`));
+
+            // Ask the user if they want to set up a baker on the existing node
+            const setupBakerOption = await askBakerSetup();
+            console.log(`User chose to set up a baker: ${setupBakerOption}`);
+            if (setupBakerOption) {
+                const { rpcPort: detectedRpcPort, dataDir: detectedDataDir } = parseNodeProcess(existingNodes[0]);
+                const network = getNodeNetwork(detectedDataDir);
+                console.log('Setting up baker on existing node...');
+                await setupBakerOnExistingNode(detectedRpcPort, detectedDataDir, network);
+                return;
             }
-        ]);
-
-        if (!continueAsRoot) {
-            console.log('Please re-run the script with a non-root user.');
-            process.exit(0);
+        } else {
+            console.log('No existing Tezos nodes found.');
         }
-    }
-    // Install Zcash parameters if they are not already present
-    await installZcashParams();
 
-    // Install or update the Tezos node binaries
-    await installTezosNode();
+        // If no existing nodes or baker was chosen, ask what to set up next
+        console.log('Prompting the user for the next action ...');
+        const setupType = await askSetupType();
+        console.log(`User selected setup type: ${setupType}`);
 
-    console.log('Detecting existing Tezos nodes...');
-    const existingNodes = detectExistingNodes(); // Detect existing Tezos nodes running on the system
-
-    let rpcPort;
-    let netPort;
-    let network;
-    let dataDir;
-
-    if (existingNodes.length > 0) {
-        console.log('Existing Tezos nodes:');
-        existingNodes.forEach(node => console.log(`- ${node}`));
-
-        // Prompt the user to set up a baker on the existing node
-        const { setupBakerOption } = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'setupBakerOption',
-                message: 'Tezos nodes are already running. Do you want to set up a baker on the existing node?',
-                default: true
-            }
-        ]);
-
-        if (setupBakerOption) {
-            // Extract information about the running node
-            const { rpcPort: detectedRpcPort, dataDir: detectedDataDir } = parseNodeProcess(existingNodes[0]);
-            rpcPort = detectedRpcPort;
-            dataDir = detectedDataDir;
-            network = getNodeNetwork(dataDir);
-
-            // Retrieve the current protocol for the node
-            let protocolHash;
-            try {
-                protocolHash = await getCurrentProtocol(rpcPort);
-                console.log(`Current protocol: ${protocolHash}`);
-            } catch (error) {
-                console.error(`Could not retrieve the current protocol after several attempts: ${error.message}`);
-                process.exit(1);
-            }
-
-            // Install and configure the baker service
-            await installTezosBaker(protocolHash);
-            console.log(`Setting up a baker on the existing node using RPC port ${rpcPort} and network ${network}...`);
-            await setupBaker(dataDir, rpcPort, network);
-
-            // Retrieve the selected baker address and alias after setup
-            const { address: selectedBakerAddress, alias: bakerAlias } = getAddress();
-
-            // Prompt the user to set up monitoring for the baker
-            const { setupMonitoring } = await inquirer.prompt([
-                {
-                    type: 'confirm',
-                    name: 'setupMonitoring',
-                    message: 'Do you want to set up monitoring for the baker?',
-                    default: true
-                }
-            ]);
-
-            if (setupMonitoring) {
-                await postBakerSetup();
-            }
-
+        // Handle the user choosing to set up Etherlink (Smart Rollup + EVM)
+        if (setupType === 'smartRollup') {
+            console.log('Starting Etherlink setup...');
+            await setupEtherlink();
+            console.log('Etherlink setup completed.');
             return;
         }
 
-        // Ask if the user wants to create a new Tezos node
-        const { setupNewNode } = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'setupNewNode',
-                message: 'Do you want to create a new Tezos node?',
-                default: false
-            }
-        ]);
+        // If "Node only" or "Node + Baker" is chosen, proceed to set up the L1 node
+        let network;
+        if (setupType === 'nodeAndBaker' || setupType === 'nodeOnly') {
+            console.log('Prompting user for network selection...');
+            network = await askNetwork();
+            const snapshotSizes = await getSnapshotSizes(network);
+            const mode = await askHistoryMode(snapshotSizes);
 
-        if (!setupNewNode) {
-            console.log('Installation cancelled.');
+            console.log('Setting up L1 node...');
+            const { rpcPort, netPort, dataDir, protocolHash } = await setupL1Node(network, mode);
+
+            if (setupType === 'nodeAndBaker') {
+                console.log('Setting up baker on new node...');
+                await setupBakerOnNewNode(rpcPort, dataDir, network, protocolHash);
+            }
+
+            console.log('Installation completed.');
             process.exit(0);
         }
-    } else {
-        console.log('No existing Tezos nodes found.');
-    }
 
-    // Prompt user to select the setup type: Node only, Node + Baker, or Baker only
-    const { setupType } = await inquirer.prompt([
-        {
-            type: 'list',
-            name: 'setupType',
-            message: 'What would you like to set up?',
-            choices: [
-                { name: 'Node only', value: 'nodeOnly' },
-                { name: 'Node + Baker', value: 'nodeAndBaker' },
-                { name: 'Baker only (on an existing node)', value: 'bakerOnly' }
-            ]
+        // If "Baker only" is chosen, set up a baker on the existing node
+        if (setupType === 'bakerOnly') {
+            console.log('Setting up baker only...');
+            const { rpcPort: detectedRpcPort, dataDir: detectedDataDir } = parseNodeProcess(existingNodes[0]);
+            const rpcPort = detectedRpcPort;
+            const dataDir = detectedDataDir;
+            const network = getNodeNetwork(dataDir);
+
+            await setupBakerOnExistingNode(rpcPort, dataDir, network);
         }
-    ]);
-
-    if (setupType === 'bakerOnly') {
-        console.log('Please provide the details of the existing node to set up the baker.');
-
-        const { rpcPort: detectedRpcPort, dataDir: detectedDataDir } = parseNodeProcess(existingNodes[0]);
-        rpcPort = detectedRpcPort;
-        dataDir = detectedDataDir;
-        network = getNodeNetwork(dataDir);
-
-        let protocolHash;
-        try {
-            protocolHash = await getCurrentProtocol(rpcPort);
-            console.log(`Current protocol: ${protocolHash}`);
-        } catch (error) {
-            console.error(`Could not retrieve the current protocol after several attempts: ${error.message}`);
-            process.exit(1);
-        }
-
-        await installTezosBaker(protocolHash);
-        console.log(`Setting up a baker on the existing node using RPC port ${rpcPort}, data directory ${dataDir}, and network ${network}...`);
-        await setupBaker(dataDir, rpcPort, network);
-
-        // Retrieve the selected baker address and alias after setup
-        const { address: selectedBakerAddress, alias: bakerAlias } = getAddress();
-
-
-        const { setupMonitoring } = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'setupMonitoring',
-                message: 'Do you want to set up monitoring for the baker?',
-                default: true
-            }
-        ]);
-
-        if (setupMonitoring) {
-            console.log(`Selected Baker Address Main: ${selectedBakerAddress}`);
-            await postBakerSetup();
-        }
-
-        return;
-    }
-
-    // Ask user to choose the Tezos network
-    const { networkAnswer } = await inquirer.prompt([
-        {
-            type: 'list',
-            name: 'networkAnswer',
-            message: 'Choose the network:',
-            choices: ['mainnet', 'ghostnet']
-        }
-    ]);
-    network = networkAnswer;
-
-    // Fetch available snapshot sizes for the selected network
-    const snapshotSizes = await getSnapshotSizes(network);
-
-    // Prompt the user to choose the history mode for the node
-    const { mode } = await inquirer.prompt([
-        {
-            type: 'list',
-            name: 'mode',
-            message: 'Choose the mode:',
-            choices: [
-                { name: `full (${snapshotSizes.full} GB)`, value: 'full' },
-                { name: `rolling (${snapshotSizes.rolling} GB)`, value: 'rolling' }
-            ]
-        }
-    ]);
-
-    // Ask the user if they want to import the snapshot in fast or safe mode
-    const { fastMode } = await inquirer.prompt([
-        {
-            type: 'list',
-            name: 'fastMode',
-            message: 'Choose the import mode:',
-            choices: [
-                { name: 'Fast mode (no checks)', value: true },
-                { name: 'Safe mode (with checks)', value: false }
-            ]
-        }
-    ]);
-
-    // Select RPC and network ports, ensuring they are not already in use
-    while (true) {
-        const answers = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'rpcPort',
-                message: 'Enter the RPC port to use (or press Enter to use the default port 8732):',
-                default: '8732'
-            },
-            {
-                type: 'input',
-                name: 'netPort',
-                message: 'Enter the network port to use (or press Enter to use the default port 9732):',
-                default: '9732'
-            }
-        ]);
-
-        const rpcPortInUse = await checkPortInUse(answers.rpcPort);
-        const netPortInUse = await checkPortInUse(answers.netPort);
-
-        if (rpcPortInUse) {
-            console.log(`RPC port ${answers.rpcPort} is already in use. Please choose another port.`);
-        } else if (netPortInUse) {
-            console.log(`Network port ${answers.netPort} is already in use. Please choose another port.`);
-        } else {
-            rpcPort = answers.rpcPort;
-            netPort = answers.netPort;
-            break;
-        }
-    }
-
-    // Determine where to create the data directory and handle potential conflicts
-    while (true) {
-        const { dirName, dirPath } = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'dirName',
-                message: 'Enter the name for the data directory (default is tezos-node):',
-                default: 'tezos-node',
-            },
-            {
-                type: 'input',
-                name: 'dirPath',
-                message: 'Enter the path where the directory should be created:',
-                default: BASE_DIR,
-            },
-        ]);
-
-        dataDir = path.join(dirPath, dirName);
-
-        if (fs.existsSync(dataDir)) {
-            console.log(`The directory ${dataDir} already exists.`);
-            const { action } = await inquirer.prompt([
-                {
-                    type: 'list',
-                    name: 'action',
-                    message: `The directory ${dataDir} already exists. What would you like to do?`,
-                    choices: [
-                        { name: 'Remove the existing directory', value: 'remove' },
-                        { name: 'Choose a different directory', value: 'newDir' },
-                        { name: 'Cancel installation', value: 'cancel' },
-                    ],
-                },
-            ]);
-
-            if (action === 'remove') {
-                try {
-                    fs.rmSync(dataDir, { recursive: true, force: true });
-                    console.log(`Directory ${dataDir} removed successfully.`);
-                    break;
-                } catch (error) {
-                    console.error(`Failed to remove the directory: ${error.message}`);
-                    const { retry } = await inquirer.prompt([
-                        {
-                            type: 'confirm',
-                            name: 'retry',
-                            message: 'Do you want to try a different directory?',
-                            default: true,
-                        },
-                    ]);
-                    if (!retry) {
-                        console.log('Installation cancelled.');
-                        process.exit(0);
-                    }
-                }
-            } else if (action === 'newDir') {
-                continue;
-            } else {
-                console.log('Installation cancelled.');
-                process.exit(0);
-            }
-        } else {
-            fs.mkdirSync(dataDir, { recursive: true });
-            break;
-        }
-    }
-
-    const serviceName = path.basename(dataDir); // Use the directory name as the service name
-
-    // Initialize and configure the Tezos node
-    while (true) {
-        try {
-            console.log('Initializing the node...');
-            execSync(`octez-node config init --data-dir "${dataDir}" --network=${network} --history-mode=${mode}`);
-            console.log('Starting the node to create identity...');
-            const nodeProcess = exec(`octez-node run --data-dir "${dataDir}"`);
-
-            try {
-                await waitForIdentityFile(dataDir); // Wait for the identity file to be created
-                console.log('Identity created, stopping the node...');
-                nodeProcess.kill('SIGINT'); // Stop the node
-                await new Promise(resolve => setTimeout(resolve, 5000)); // Wait to ensure the process is fully stopped
-                break;
-            } catch (error) {
-                console.error(error.message);
-                console.log('Cleaning node data...');
-                cleanNodeData(dataDir);
-                console.log('Reinitializing...');
-            }
-        } catch (error) {
-            console.error(`Error initializing the node: ${error.message}`);
-            process.exit(1);
-        }
-    }
-
-    const snapshotPath = '/tmp/snapshot';
-
-    // Download and import the snapshot for faster node setup
-    while (true) {
-        try {
-            console.log(`Downloading snapshot from https://snapshots.eu.tzinit.org/${network}/${mode}...`);
-            await downloadFile(`https://snapshots.eu.tzinit.org/${network}/${mode}`, snapshotPath);
-            break;
-        } catch (error) {
-            console.error(`Error downloading snapshot: ${error.message}`);
-        }
-    }
-
-    while (true) {
-        try {
-            console.log('Cleaning files before snapshot import...');
-            cleanNodeDataBeforeImport(dataDir);
-            await importSnapshot(network, mode, dataDir, fastMode, snapshotPath, netPort);
-            fs.unlinkSync(snapshotPath); // Remove the snapshot file after import
-            break;
-        } catch (error) {
-            console.error(`Error importing snapshot: ${error.message}`);
-            console.log('Attempting to clean and reimport snapshot...');
-            cleanNodeData(dataDir);
-        }
-    }
-
-    // Configure the node as a systemd service
-    console.log('Configuring systemd service...');
-    try {
-        configureServiceUnit(dataDir, rpcPort, netPort, serviceName);
-        console.log('Systemd service configured successfully.');
     } catch (error) {
-        console.error(`Error configuring systemd service: ${error.message}`);
+        console.error('An error occurred during the setup:', error.message);
         process.exit(1);
     }
+}
 
-    // Wait for the node to fully bootstrap before proceeding
-    await waitForNodeToBootstrap(rpcPort);
-
-    // Get the current protocol after bootstrapping
+// Setup baker on an existing node
+async function setupBakerOnExistingNode(rpcPort, dataDir, network) {
+    console.log('Starting baker setup on an existing node...');
     let protocolHash;
     try {
         protocolHash = await getCurrentProtocol(rpcPort);
         console.log(`Current protocol: ${protocolHash}`);
+
+        await installTezosBaker(protocolHash);
+        console.log(`Setting up a baker on the existing node using RPC port ${rpcPort} and network ${network}...`);
+        await setupBaker(dataDir, rpcPort, network);
+
+        const selectedBakerAddress = getAddress().address;
+        const setupMonitoring = await askSetupMonitoring();
+        if (setupMonitoring) {
+            console.log(`Selected Baker Address: ${selectedBakerAddress}`);
+            await postBakerSetup();
+        }
     } catch (error) {
-        console.error(`Could not retrieve the current protocol after several attempts: ${error.message}`);
+        console.error(`Error setting up baker on existing node: ${error.message}`);
         process.exit(1);
     }
+}
 
-    // If the user chose to set up a baker, proceed with the setup
-    if (setupType === 'nodeAndBaker') {
-        console.log('Setting up baker...');
+// Setup baker on a new node
+async function setupBakerOnNewNode(rpcPort, dataDir, network, protocolHash) {
+    console.log('Starting baker setup on a new node...');
+    try {
         await installTezosBaker(protocolHash);
         await setupBaker(dataDir, rpcPort, network);
 
-        // Retrieve the selected baker address and alias after setup
-        const { address: selectedBakerAddress, alias: bakerAlias } = getAddress();
-
-        const { setupMonitoring } = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'setupMonitoring',
-                message: 'Do you want to set up monitoring for the baker?',
-                default: true
-            }
-        ]);
-
+        const selectedBakerAddress = getAddress().address;
+        const setupMonitoring = await askSetupMonitoring();
         if (setupMonitoring) {
-            console.log(`Selected Baker Address Main: ${selectedBakerAddress}`);
+            console.log(`Selected Baker Address: ${selectedBakerAddress}`);
             await postBakerSetup();
         }
+    } catch (error) {
+        console.error(`Error setting up baker on new node: ${error.message}`);
+        process.exit(1);
     }
-
-    console.log('Installation completed.');
-    process.exit(0);
 }
 
 main();
